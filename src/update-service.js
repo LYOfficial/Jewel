@@ -1,5 +1,4 @@
 const https = require('https');
-const { spawn } = require('child_process');
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -192,32 +191,102 @@ async function applyUpdate() {
   updating = true;
   try { fs.writeFileSync(UPDATING_FILE, Date.now().toString(), 'utf-8'); } catch { /* ignore */ }
 
-  const composePath = path.join(appDir, 'docker-compose.yml');
-  const isDocker = fs.existsSync(composePath);
-
-  if (isDocker) {
-    // Phase 1: build the new image without restarting
-    try {
-      execSync('docker compose build --no-cache 2>/dev/null || docker-compose build --no-cache 2>/dev/null', {
-        cwd: appDir, timeout: 600000, stdio: 'pipe'
-      });
-    } catch (err) {
-      updating = false;
-      try { fs.unlinkSync(UPDATING_FILE); } catch { /* ignore */ }
-      throw new Error('Docker image build failed: ' + err.message);
-    }
-    // Image built successfully — client will show restart button
-    return { success: true, needsRestart: true };
+  // Build the new image. This works regardless of how the container was
+  // originally deployed (docker run or docker compose) — we build from the
+  // cloned source inside the container, and the resulting `jewel:latest`
+  // image will be used by scheduleRestart() to recreate the container.
+  try {
+    execSync('docker build --no-cache -t jewel:latest .', {
+      cwd: appDir, timeout: 600000, stdio: 'pipe'
+    });
+  } catch (err) {
+    updating = false;
+    try { fs.unlinkSync(UPDATING_FILE); } catch { /* ignore */ }
+    throw new Error('Docker image build failed: ' + err.message);
   }
 
-  // Non-Docker: restart the Node process directly
-  const child = spawn(process.argv[0], [path.join(appDir, 'src', 'index.js')], {
-    detached: true,
-    stdio: 'ignore',
-    cwd: appDir,
-    env: { ...process.env, NODE_ENV: 'production' }
+  return { success: true, needsRestart: true };
+}
+
+async function scheduleRestart() {
+  if (!updating) throw new Error('No update in progress');
+
+  const docker = dockerService.getDocker();
+  const hostname = process.env.HOSTNAME;
+  if (!hostname) throw new Error('Cannot detect container hostname (HOSTNAME env not set)');
+
+  const currentContainer = docker.getContainer(hostname);
+  const info = await currentContainer.inspect();
+
+  // Extract the current container's config so the helper can recreate it
+  // with the exact same settings but the new image.
+  const hc = info.HostConfig || {};
+  const containerName = (info.Name || '').replace(/^\//, '') || 'jewel';
+  const portBindings = hc.PortBindings || {};
+  const binds = hc.Binds || [];
+  const restartPolicy = (hc.RestartPolicy && hc.RestartPolicy.Name) || 'unless-stopped';
+  const envVars = info.Config?.Env || [];
+
+  // Build a `docker run` command that recreates this container
+  const parts = ['docker', 'run', '-d'];
+  parts.push('--name', shellQ(containerName));
+  parts.push('--restart', shellQ(restartPolicy));
+
+  for (const [containerPort, mappings] of Object.entries(portBindings)) {
+    for (const m of (mappings || [])) {
+      const host = m.HostIp ? `${m.HostIp}:` : '';
+      const cp = containerPort.split('/')[0]; // strip /tcp /udp
+      parts.push('-p', shellQ(`${host}${m.HostPort}:${cp}`));
+    }
+  }
+
+  for (const b of binds) {
+    parts.push('-v', shellQ(b));
+  }
+
+  for (const e of envVars) {
+    parts.push('-e', shellQ(e));
+  }
+
+  parts.push('jewel:latest');
+
+  const runCmd = parts.join(' ');
+
+  // Write a self-contained helper script to the data volume
+  const helperScript = [
+    '#!/bin/sh',
+    'sleep 3',
+    `docker rm -f ${shellQ(containerName)}`,
+    runCmd,
+    'rm -f /data/jewel-restart.sh'
+  ].join('\n');
+
+  fs.writeFileSync(path.join(config.dataDir, 'jewel-restart.sh'), helperScript, 'utf-8');
+
+  // Find the data volume mount so the helper can access the script
+  const dataMount = (info.Mounts || []).find(m => m.Destination === '/data');
+  const dataVolumeName = dataMount ? (dataMount.Name || dataMount.Source) : null;
+
+  const helperBinds = ['/var/run/docker.sock:/var/run/docker.sock'];
+  if (dataVolumeName) helperBinds.push(`${dataVolumeName}:/data`);
+
+  // Launch the helper container using the freshly built jewel:latest image
+  const helper = await docker.createContainer({
+    Image: 'jewel:latest',
+    Cmd: ['sh', '/data/jewel-restart.sh'],
+    name: 'jewel-restart-helper',
+    HostConfig: {
+      AutoRemove: true,
+      Binds: helperBinds
+    }
   });
-  child.unref();
+
+  await helper.start();
+
+  // CRITICAL: set restart policy to "no" on the current container.
+  // Without this, Docker's "restart: unless-stopped" would restart the OLD
+  // container immediately after process.exit(0).
+  await currentContainer.update({ RestartPolicy: { Name: 'no' } });
 
   updateAvailable = false;
   latestRemoteInfo = null;
@@ -225,70 +294,8 @@ async function applyUpdate() {
   return { success: true, restarting: true };
 }
 
-async function scheduleRestart() {
-  if (!updating) throw new Error('No update in progress');
-
-  const appDir = path.join(__dirname, '..');
-  const composePath = path.join(appDir, 'docker-compose.yml');
-  if (!fs.existsSync(composePath)) throw new Error('docker-compose.yml not found');
-
-  // Use dockerode to talk to the Docker daemon via the mounted socket.
-  // This is more reliable than spawning `docker run` CLI commands.
-  const docker = dockerService.getDocker();
-
-  // 1. Inspect the current container to discover volume names and compose project
-  const hostname = process.env.HOSTNAME;
-  if (!hostname) throw new Error('Cannot detect container hostname (HOSTNAME env not set)');
-
-  const currentContainer = docker.getContainer(hostname);
-  const info = await currentContainer.inspect();
-
-  // 2. Get compose project name from container labels
-  const projectName = (info.Config?.Labels?.['com.docker.compose.project']) || 'jewel';
-
-  // 3. Find the real volume name for /data (compose prefixes volume names)
-  const dataMount = (info.Mounts || []).find(m => m.Destination === '/data');
-  const dataVolumeName = dataMount ? (dataMount.Name || dataMount.Source) : null;
-
-  // 4. Copy compose file to the data volume so the helper can read it
-  const composeContent = fs.readFileSync(composePath, 'utf-8');
-  const composeCopy = path.join(config.dataDir, 'jewel-compose.yml');
-  fs.writeFileSync(composeCopy, composeContent, 'utf-8');
-
-  // 5. Build the command the helper container will execute:
-  //    wait for this container to die, then recreate it with the new image
-  const helperCmd = [
-    'sleep 3',
-    `docker compose -p ${projectName} -f /data/jewel-compose.yml up -d --no-build --force-recreate`,
-    'rm -f /data/jewel-compose.yml'
-  ].join(' && ');
-
-  // 6. Create the helper container via Docker API
-  const binds = ['/var/run/docker.sock:/var/run/docker.sock'];
-  if (dataVolumeName) binds.push(`${dataVolumeName}:/data`);
-
-  const helper = await docker.createContainer({
-    Image: 'jewel:latest',   // use our own image (has docker-cli installed, guaranteed to exist after build)
-    Cmd: ['sh', '-c', helperCmd],
-    name: 'jewel-restart-helper',
-    HostConfig: {
-      AutoRemove: true,
-      Binds: binds
-    }
-  });
-
-  await helper.start();
-
-  // 7. CRITICAL: set restart policy to "no" on the current container.
-  //    Without this, Docker's "restart: unless-stopped" would restart the OLD
-  //    container immediately after process.exit(0), and the helper's
-  //    `docker compose up --force-recreate` would race with that restart.
-  await currentContainer.update({ RestartPolicy: { Name: 'no' } });
-
-  updateAvailable = false;
-  latestRemoteInfo = null;
-
-  return { success: true, restarting: true };
+function shellQ(s) {
+  return "'" + String(s).replace(/'/g, "'\\''") + "'";
 }
 
 module.exports = {

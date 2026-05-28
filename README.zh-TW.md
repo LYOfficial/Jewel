@@ -33,16 +33,23 @@ Jewel 是一個輕量級的 Git 到 Docker 整合部署平台，靈感來源於 
 
 ### Docker 部署（推薦）
 
+一鍵安裝，無需 docker compose：
+
 ```bash
-git clone https://github.com/LYOfficial/Jewel.git
-cd Jewel
-export JEWEL_COMMIT=$(git rev-parse HEAD)
-docker compose up -d --build
+curl -sSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh | sh
+```
+
+自訂連接埠：
+
+```bash
+# 先下載腳本
+curl -sSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh -o install.sh
+chmod +x install.sh
+# 指定連接埠安裝
+./install.sh 8080
 ```
 
 訪問 `http://localhost:330` 即可使用。
-
-> `JEWEL_COMMIT` 用於版本偵測，讓 Jewel 能識別當前版本並在有新提交時提示更新。
 
 ### 本地執行
 
@@ -87,7 +94,9 @@ npm start
 
 ## 自我更新
 
-Jewel 會定期檢查 GitHub 倉庫是否有新的提交。當偵測到新版本時，會在左下角顯示更新提示。點擊確認後，Jewel 將自動拉取最新程式碼並重新構建部署。
+Jewel 會定期檢查 GitHub 倉庫是否有新的提交。當偵測到新版本時，會在左下角顯示更新提示。點擊確認後，Jewel 將自動拉取最新程式碼、構建新映像並重啟容器。
+
+更新採用兩階段機制：先構建新映像，完成後彈窗提示重啟，點擊重啟按鈕即可用新映像替換當前容器。無論使用 `install.sh` 還是 `docker compose` 部署，均可正常自我更新。
 
 > 與其他專案不同，Jewel 不會自動更新，需要使用者手動確認。
 

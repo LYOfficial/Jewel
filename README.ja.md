@@ -33,16 +33,23 @@ Jewel は Dokploy と Portainer にインスパイアされた軽量な Git to D
 
 ### Docker デプロイ（推奨）
 
+ワンコマンドインストール、docker-compose 不要：
+
 ```bash
-git clone https://github.com/LYOfficial/Jewel.git
-cd Jewel
-export JEWEL_COMMIT=$(git rev-parse HEAD)
-docker compose up -d --build
+curl -sSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh | sh
+```
+
+カスタムポート：
+
+```bash
+# スクリプトをダウンロード
+curl -sSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh -o install.sh
+chmod +x install.sh
+# ポートを指定してインストール
+./install.sh 8080
 ```
 
 `http://localhost:330` にアクセスして開始します。
-
-> `JEWEL_COMMIT` はバージョン検出に使用され、Jewel が現在のバージョンを認識し、新しいコミットがプッシュされたときに更新を促すことができます。
 
 ### ローカル実行
 
@@ -87,7 +94,9 @@ npm start
 
 ## 自己更新
 
-Jewel は定期的に GitHub リポジトリの新しいコミットを確認します。新バージョンが検出されると、左下に更新バナーが表示されます。ユーザーが確認すると、Jewel は最新のコードを自動的にプルして再デプロイします。
+Jewel は定期的に GitHub リポジトリの新しいコミットを確認します。新バージョンが検出されると、左下に更新バナーが表示されます。ユーザーが確認すると、Jewel は最新のコードをプルし、新しいイメージをビルドしてコンテナを再起動します。
+
+更新は2段階の仕組みを採用しています：まず新しいイメージをビルドし、完了すると再起動ボタンが表示されます。ボタンをクリックすると、現在のコンテナが新しいイメージに置き換えられます。`install.sh` でも `docker compose` でもデプロイした場合でも、自己更新が正常に機能します。
 
 > 他のツールとは異なり、Jewel は自動更新せず、手動確認が必要です。
 

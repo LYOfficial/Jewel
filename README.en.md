@@ -33,16 +33,23 @@ Jewel is a lightweight Git-to-Docker deployment platform inspired by Dokploy and
 
 ### Docker (Recommended)
 
+One-command install, no docker-compose required:
+
 ```bash
-git clone https://github.com/LYOfficial/Jewel.git
-cd Jewel
-export JEWEL_COMMIT=$(git rev-parse HEAD)
-docker compose up -d --build
+curl -sSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh | sh
+```
+
+Custom port:
+
+```bash
+# Download the script first
+curl -sSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh -o install.sh
+chmod +x install.sh
+# Install with custom port
+./install.sh 8080
 ```
 
 Visit `http://localhost:330` to get started.
-
-> `JEWEL_COMMIT` is used for version detection, enabling Jewel to identify the current version and prompt for updates when new commits are pushed.
 
 ### Local
 
@@ -87,7 +94,9 @@ Default: `330`. Can be changed via the `PORT` environment variable.
 
 ## Self-Update
 
-Jewel periodically checks the GitHub repository for new commits. When a new version is detected, an update banner appears in the bottom-left corner. After user confirmation, Jewel automatically pulls the latest code and redeploys.
+Jewel periodically checks the GitHub repository for new commits. When a new version is detected, an update banner appears in the bottom-left corner. After user confirmation, Jewel automatically pulls the latest code, builds a new image, and restarts the container.
+
+The update uses a two-phase mechanism: first the new image is built, then a restart button appears. Clicking it replaces the current container with the new one. This works regardless of whether Jewel was deployed via `install.sh` or `docker compose`.
 
 > Unlike other tools, Jewel does not auto-update — it requires manual confirmation.
 

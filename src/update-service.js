@@ -155,6 +155,15 @@ async function applyUpdate() {
     // Rebuild and restart via docker compose
     const composePath = path.join(appDir, 'docker-compose.yml');
     if (fs.existsSync(composePath)) {
+      // Stop and remove old containers first
+      try {
+        execSync('docker compose down', { cwd: appDir, timeout: 120000 });
+      } catch {
+        try {
+          execSync('docker-compose down', { cwd: appDir, timeout: 120000 });
+        } catch { /* ignore */ }
+      }
+
       let composeOk = false;
       try {
         execSync('docker compose up -d --build', { cwd: appDir, timeout: 300000 });

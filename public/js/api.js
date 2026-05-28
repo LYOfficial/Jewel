@@ -71,6 +71,13 @@ const API = {
     return this.get(`/git/repos?token=${token}&provider=${provider || 'github'}&host=${host || ''}`);
   },
 
+  // Git Tokens
+  getTokens() { return this.get('/tokens'); },
+  getToken(id) { return this.get(`/tokens/${id}`); },
+  createToken(data) { return this.post('/tokens', data); },
+  updateToken(id, data) { return this.put(`/tokens/${id}`, data); },
+  deleteToken(id) { return this.del(`/tokens/${id}`); },
+
   // System
   getSystemInfo() { return this.get('/system/info'); },
   checkUpdate() { return this.get('/system/update/check'); },

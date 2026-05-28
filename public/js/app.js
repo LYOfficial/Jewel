@@ -94,6 +94,7 @@ const App = {
       case 'dashboard': Dashboard.render(container); break;
       case 'projects': Projects.render(container); break;
       case 'containers': Containers.render(container); break;
+      case 'tokens': Tokens.render(container); break;
       case 'settings': Settings.render(container); break;
     }
   },

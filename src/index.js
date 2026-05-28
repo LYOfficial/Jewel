@@ -10,6 +10,7 @@ const routesProjects = require('./routes-projects');
 const routesContainers = require('./routes-containers');
 const routesGit = require('./routes-git');
 const routesSystem = require('./routes-system');
+const routesTokens = require('./routes-tokens');
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.use('/api/projects', routesProjects);
 app.use('/api/containers', routesContainers);
 app.use('/api/git', routesGit);
 app.use('/api/system', routesSystem);
+app.use('/api/tokens', routesTokens);
 
 app.post('/api/webhook/:id/:secret', (req, res) => {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);

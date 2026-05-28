@@ -46,6 +46,16 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT DEFAULT ''
   );
+
+  CREATE TABLE IF NOT EXISTS git_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    provider TEXT DEFAULT 'github',
+    host TEXT DEFAULT '',
+    token TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();

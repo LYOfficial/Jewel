@@ -55,7 +55,17 @@ const Projects = {
     }
   },
 
-  showAddForm() {
+  async showAddForm() {
+    let tokenOptions = '';
+    try {
+      const savedTokens = await API.getTokens();
+      if (savedTokens.length > 0) {
+        tokenOptions = savedTokens.map(t =>
+          `<option value="${t.id}">${esc(t.name)} (${t.provider}${t.host ? ' - ' + esc(t.host) : ''})</option>`
+        ).join('');
+      }
+    } catch { /* ignore */ }
+
     const content = `
       <div class="form-group">
         <label data-i18n="project.name">名称</label>
@@ -66,7 +76,15 @@ const Projects = {
         <input type="url" id="projGitUrl" placeholder="https://github.com/user/repo.git" required>
       </div>
       <div class="form-group">
-        <label data-i18n="project.gitToken">Git Token (可选)</label>
+        <label data-i18n="project.selectToken">选择已保存的令牌</label>
+        <select id="projTokenSelect">
+          <option value="" data-i18n="project.noToken">不使用令牌</option>
+          <option value="__manual__" data-i18n="project.manualInput">手动输入...</option>
+          ${tokenOptions}
+        </select>
+      </div>
+      <div class="form-group" id="projManualTokenGroup" style="display:none">
+        <label data-i18n="project.gitToken">Git Token</label>
         <input type="text" id="projGitToken" placeholder="ghp_xxxx">
       </div>
       <div class="form-row">
@@ -92,13 +110,33 @@ const Projects = {
       }
     ]);
     I18n.apply();
+
+    document.getElementById('projTokenSelect').addEventListener('change', (e) => {
+      document.getElementById('projManualTokenGroup').style.display =
+        e.target.value === '__manual__' ? 'block' : 'none';
+    });
   },
 
   async createProject() {
+    const tokenSelect = document.getElementById('projTokenSelect').value;
+    let gitToken = '';
+    if (tokenSelect === '__manual__') {
+      gitToken = document.getElementById('projGitToken').value;
+    } else if (tokenSelect) {
+      try {
+        const savedTokens = await API.getTokens();
+        const selected = savedTokens.find(t => String(t.id) === tokenSelect);
+        if (selected) {
+          const fullToken = await API.getToken(selected.id);
+          gitToken = fullToken.token || '';
+        }
+      } catch { /* ignore */ }
+    }
+
     const data = {
       name: document.getElementById('projName').value,
       git_url: document.getElementById('projGitUrl').value,
-      git_token: document.getElementById('projGitToken').value,
+      git_token: gitToken,
       git_branch: document.getElementById('projBranch').value || 'main',
       compose_path: document.getElementById('projCompose').value || 'docker-compose.yml',
       auto_deploy: document.getElementById('projAutoDeploy').checked
@@ -159,6 +197,19 @@ const Projects = {
         `<div class="env-row"><input value="${esc(k)}" data-env-key><input value="${esc(v)}" data-env-val><span class="env-remove" onclick="this.parentElement.remove()">&times;</span></div>`
       ).join('');
 
+      let tokenOptions = '';
+      let hasMatchingToken = false;
+      try {
+        const savedTokens = await API.getTokens();
+        if (savedTokens.length > 0) {
+          tokenOptions = savedTokens.map(t => {
+            const selected = project.git_token && String(t.id) === project.git_token_id ? ' selected' : '';
+            if (selected) hasMatchingToken = true;
+            return `<option value="${t.id}"${selected}>${esc(t.name)} (${t.provider}${t.host ? ' - ' + esc(t.host) : ''})</option>`;
+          }).join('');
+        }
+      } catch { /* ignore */ }
+
       const content = `
         <div class="form-group">
           <label data-i18n="project.name">名称</label>
@@ -169,6 +220,14 @@ const Projects = {
           <input type="url" id="detailGitUrl" value="${esc(project.git_url)}">
         </div>
         <div class="form-group">
+          <label data-i18n="project.selectToken">选择已保存的令牌</label>
+          <select id="detailTokenSelect">
+            <option value="" ${!project.git_token ? 'selected' : ''} data-i18n="project.noToken">不使用令牌</option>
+            <option value="__manual__" ${project.git_token && !hasMatchingToken ? 'selected' : ''} data-i18n="project.manualInput">手动输入...</option>
+            ${tokenOptions}
+          </select>
+        </div>
+        <div class="form-group" id="detailManualTokenGroup" style="display:${project.git_token && !hasMatchingToken ? 'block' : 'none'}">
           <label data-i18n="project.gitToken">Git Token</label>
           <input type="text" id="detailGitToken" value="${esc(project.git_token)}" placeholder="ghp_xxxx">
         </div>
@@ -207,6 +266,11 @@ const Projects = {
       ]);
       I18n.apply();
 
+      document.getElementById('detailTokenSelect').addEventListener('change', (e) => {
+        document.getElementById('detailManualTokenGroup').style.display =
+          e.target.value === '__manual__' ? 'block' : 'none';
+      });
+
       try {
         const logs = await API.getProjectLogs(id);
         const logEl = document.getElementById('projectLogs');
@@ -231,10 +295,21 @@ const Projects = {
   },
 
   async saveProject(id) {
+    const tokenSelect = document.getElementById('detailTokenSelect').value;
+    let gitToken = '';
+    if (tokenSelect === '__manual__') {
+      gitToken = document.getElementById('detailGitToken').value;
+    } else if (tokenSelect) {
+      try {
+        const fullToken = await API.getToken(tokenSelect);
+        gitToken = fullToken.token || '';
+      } catch { /* ignore */ }
+    }
+
     const data = {
       name: document.getElementById('detailName').value,
       git_url: document.getElementById('detailGitUrl').value,
-      git_token: document.getElementById('detailGitToken').value,
+      git_token: gitToken,
       git_branch: document.getElementById('detailBranch').value,
       compose_path: document.getElementById('detailCompose').value,
       auto_deploy: document.getElementById('detailAutoDeploy').checked

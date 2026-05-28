@@ -517,13 +517,16 @@ textarea { resize: vertical; min-height: 80px; }
 
 /* ====== Footer ====== */
 .app-footer {
-  padding: 10px 24px;
-  text-align: center;
-  font-size: 12px;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  padding: 8px 16px;
+  font-size: 11px;
   color: var(--text-muted);
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  flex-shrink: 0;
+  background: rgba(10, 10, 10, 0.85);
+  backdrop-filter: blur(6px);
+  z-index: 50;
+  pointer-events: auto;
 }
 .app-footer a {
   color: var(--text-secondary);

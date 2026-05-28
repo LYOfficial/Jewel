@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  jewel:
+    build: .
+    image: jewel:latest
+    container_name: jewel
+    ports:
+      - "330:330"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - jewel-data:/data
+    environment:
+      - NODE_ENV=production
+      - DATA_DIR=/data
+      - PORT=330
+      - JWT_SECRET=change-this-in-production
+    restart: unless-stopped
+
+volumes:
+  jewel-data:

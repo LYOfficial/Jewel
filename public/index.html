@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jewel</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <h1>JEWEL</h1>
+        <span class="version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-item active" data-page="dashboard">
+          <span class="nav-icon">&#9632;</span>
+          <span data-i18n="nav.dashboard">仪表盘</span>
+        </div>
+        <div class="nav-item" data-page="projects">
+          <span class="nav-icon">&#9654;</span>
+          <span data-i18n="nav.projects">项目</span>
+        </div>
+        <div class="nav-item" data-page="containers">
+          <span class="nav-icon">&#9635;</span>
+          <span data-i18n="nav.containers">容器</span>
+        </div>
+        <div class="nav-item" data-page="settings">
+          <span class="nav-icon">&#9881;</span>
+          <span data-i18n="nav.settings">设置</span>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="update-banner" id="updateBanner">
+          <div class="update-title" data-i18n="update.available">发现新版本</div>
+          <div class="update-desc" data-i18n="update.clickToApply">点击更新</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-title" id="pageTitle" data-i18n="nav.dashboard">仪表盘</div>
+        <div class="topbar-actions">
+          <select id="langSelect">
+            <option value="zh-CN">简体中文</option>
+            <option value="zh-TW">繁體中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+          </select>
+          <div class="user-menu">
+            <button class="user-menu-btn" id="userMenuBtn">
+              <span id="currentUser">admin</span> &#9662;
+            </button>
+            <div class="user-menu-dropdown" id="userMenuDropdown">
+              <button class="user-menu-item" id="changePasswordBtn" data-i18n="user.changePassword">修改密码</button>
+              <button class="user-menu-item" id="changeUsernameBtn" data-i18n="user.changeUsername">修改用户名</button>
+              <button class="user-menu-item" id="logoutBtn" data-i18n="user.logout">退出登录</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area" id="contentArea">
+        <!-- Dynamic content loaded here -->
+      </div>
+    </main>
+  </div>
+
+  <!-- Modals -->
+  <div id="modalContainer"></div>
+
+  <!-- Notification -->
+  <div id="notification" class="notification"></div>
+
+  <!-- Scripts -->
+  <script src="/js/i18n.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/modal.js"></script>
+  <script src="/js/notification.js"></script>
+  <script src="/js/dashboard.js"></script>
+  <script src="/js/projects.js"></script>
+  <script src="/js/containers.js"></script>
+  <script src="/js/settings.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

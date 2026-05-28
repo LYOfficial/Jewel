@@ -1,0 +1,80 @@
+const API = {
+  baseUrl: '/api',
+  token: localStorage.getItem('jewel-token'),
+
+  setToken(token) {
+    this.token = token;
+    localStorage.setItem('jewel-token', token);
+  },
+
+  clearToken() {
+    this.token = null;
+    localStorage.removeItem('jewel-token');
+  },
+
+  async request(method, path, body = null) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+
+    const options = { method, headers };
+    if (body) options.body = JSON.stringify(body);
+
+    const res = await fetch(`${this.baseUrl}${path}`, options);
+
+    if (res.status === 401) {
+      this.clearToken();
+      window.location.href = '/login.html';
+      throw new Error('Unauthorized');
+    }
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  },
+
+  get(path) { return this.request('GET', path); },
+  post(path, body) { return this.request('POST', path, body); },
+  put(path, body) { return this.request('PUT', path, body); },
+  del(path) { return this.request('DELETE', path); },
+
+  // Auth
+  login(username, password) { return this.post('/auth/login', { username, password }); },
+  getMe() { return this.get('/auth/me'); },
+  changePassword(current_password, new_password) { return this.post('/auth/change-password', { current_password, new_password }); },
+  changeUsername(new_username) { return this.post('/auth/change-username', { new_username }); },
+
+  // Projects
+  getProjects() { return this.get('/projects'); },
+  getProject(id) { return this.get(`/projects/${id}`); },
+  createProject(data) { return this.post('/projects', data); },
+  updateProject(id, data) { return this.put(`/projects/${id}`, data); },
+  updateProjectEnv(id, env_vars) { return this.put(`/projects/${id}/env`, { env_vars }); },
+  deleteProject(id) { return this.del(`/projects/${id}`); },
+  deployProject(id) { return this.post(`/projects/${id}/deploy`); },
+  stopProject(id) { return this.post(`/projects/${id}/stop`); },
+  restartProject(id) { return this.post(`/projects/${id}/restart`); },
+  getProjectContainers(id) { return this.get(`/projects/${id}/containers`); },
+  getProjectLogs(id) { return this.get(`/projects/${id}/logs`); },
+
+  // Containers
+  getContainers(all = false) { return this.get(`/containers?all=${all}`); },
+  getContainer(id) { return this.get(`/containers/${id}`); },
+  startContainer(id) { return this.post(`/containers/${id}/start`); },
+  stopContainer(id) { return this.post(`/containers/${id}/stop`); },
+  restartContainer(id) { return this.post(`/containers/${id}/restart`); },
+  removeContainer(id, force = false) { return this.del(`/containers/${id}?force=${force}`); },
+  getContainerLogs(id, tail = 100) { return this.get(`/containers/${id}/logs?tail=${tail}`); },
+  getContainerStats(id) { return this.get(`/containers/${id}/stats`); },
+
+  // Git
+  getGitRepos(token, provider, host) {
+    return this.get(`/git/repos?token=${token}&provider=${provider || 'github'}&host=${host || ''}`);
+  },
+
+  // System
+  getSystemInfo() { return this.get('/system/info'); },
+  checkUpdate() { return this.get('/system/update/check'); },
+  applyUpdate() { return this.post('/system/update/apply'); },
+  getSettings() { return this.get('/system/settings'); },
+  updateSettings(data) { return this.put('/system/settings', data); }
+};

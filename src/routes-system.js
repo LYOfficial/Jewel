@@ -147,7 +147,14 @@ function getNetworkStats() {
 
 const fs = require('fs');
 
-router.get('/update/check', (req, res) => {
+router.get('/update/check', async (req, res) => {
+  // Always do a live check when user explicitly asks
+  await updateService.checkForUpdate();
+  res.json(updateService.getUpdateInfo());
+});
+
+router.post('/update/check', async (req, res) => {
+  await updateService.checkForUpdate();
   res.json(updateService.getUpdateInfo());
 });
 

@@ -34,6 +34,7 @@ const Settings = {
       <div class="card">
         <div class="card-header">
           <div class="card-title" data-i18n="settings.update">系统更新</div>
+          <button class="btn btn-sm" id="refreshUpdateBtn" data-i18n="common.refresh">刷新</button>
         </div>
         <div id="updateInfo" class="loading"><span class="spinner"></span></div>
       </div>
@@ -63,6 +64,7 @@ const Settings = {
 
     document.getElementById('saveSettings').addEventListener('click', () => this.saveSettings());
     document.getElementById('changePwdBtn').addEventListener('click', () => this.changePassword());
+    document.getElementById('refreshUpdateBtn').addEventListener('click', () => this.checkUpdate(true));
 
     this.loadSystemInfo();
     this.checkUpdate();
@@ -116,21 +118,56 @@ const Settings = {
     }
   },
 
-  async checkUpdate() {
+  async checkUpdate(force = false) {
     const el = document.getElementById('updateInfo');
+    el.innerHTML = '<span class="spinner"></span>';
+
     try {
-      const info = await API.checkUpdate();
+      const info = force ? await API.forceCheckUpdate() : await API.checkUpdate();
+
+      const curCommitShort = info.currentCommit !== 'unknown' ? info.currentCommit.substring(0, 7) : 'unknown';
+      const curDate = info.currentDate ? formatDate(info.currentDate) : '-';
+
+      let html = `
+        <table class="update-table">
+          <tr>
+            <td style="color:var(--text-muted)" data-i18n="update.currentVersion">当前版本</td>
+            <td>v${esc(info.currentVersion)} <span class="commit-sha">${curCommitShort}</span> <span class="commit-date">${curDate}</span></td>
+          </tr>`;
+
       if (info.available) {
-        el.innerHTML = `
-          <p style="color:var(--warning);margin-bottom:12px" data-i18n="update.available">发现新版本</p>
-          <button class="btn btn-primary" id="applyUpdateBtn" data-i18n="update.apply">立即更新</button>
-        `;
-        I18n.apply();
-        document.getElementById('applyUpdateBtn').addEventListener('click', () => this.applyUpdate());
+        const latCommitShort = info.latestCommit ? info.latestCommit.substring(0, 7) : 'unknown';
+        const latDate = info.latestDate ? formatDate(info.latestDate) : '-';
+        html += `
+          <tr>
+            <td style="color:var(--warning)" data-i18n="update.latestVersion">最新版本</td>
+            <td>v${esc(info.latestVersion || '?')} <span class="commit-sha">${latCommitShort}</span> <span class="commit-date">${latDate}</span></td>
+          </tr>`;
+        if (info.latestMessage) {
+          html += `
+          <tr>
+            <td style="color:var(--text-muted)" data-i18n="update.commitMessage">提交信息</td>
+            <td>${esc(info.latestMessage)}</td>
+          </tr>`;
+        }
+        html += `</table>
+          <div style="margin-top:16px">
+            <button class="btn btn-primary" id="applyUpdateBtn" data-i18n="update.apply">立即更新</button>
+          </div>`;
       } else {
-        el.innerHTML = `<p style="color:var(--success)" data-i18n="update.upToDate">已是最新版本</p>`;
-        I18n.apply();
+        html += `</table>
+          <p style="color:var(--success);margin-top:12px" data-i18n="update.upToDate">已是最新版本</p>`;
       }
+
+      if (info.lastCheckTime) {
+        html += `<p style="color:var(--text-muted);font-size:11px;margin-top:8px">${I18n.t('update.lastCheck') || '上次检查'}: ${formatDate(info.lastCheckTime)}</p>`;
+      }
+
+      el.innerHTML = html;
+      I18n.apply();
+
+      const btn = document.getElementById('applyUpdateBtn');
+      if (btn) btn.addEventListener('click', () => this.applyUpdate());
     } catch {
       el.innerHTML = `<p style="color:var(--text-muted)" data-i18n="update.checkFailed">检查更新失败</p>`;
     }
@@ -149,3 +186,10 @@ const Settings = {
     } catch (err) { Notify.error(err.message); }
   }
 };
+
+function formatDate(dateStr) {
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleString();
+  } catch { return dateStr; }
+}

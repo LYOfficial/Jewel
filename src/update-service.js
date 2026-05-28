@@ -6,9 +6,10 @@ const fs = require('fs');
 const config = require('./config');
 
 let updateAvailable = false;
-let latestRemoteCommit = null;
+let latestRemoteInfo = null;
 let currentCommit = null;
 let updating = false;
+let lastCheckTime = null;
 
 const COMMIT_FILE = path.join(config.dataDir, '.jewel-commit');
 const UPDATING_FILE = path.join(config.dataDir, '.jewel-updating');
@@ -28,9 +29,7 @@ function clearUpdatingFlag() {
 
 function saveCurrentCommit(sha) {
   currentCommit = sha;
-  try {
-    fs.writeFileSync(COMMIT_FILE, sha, 'utf-8');
-  } catch { /* ignore */ }
+  try { fs.writeFileSync(COMMIT_FILE, sha, 'utf-8'); } catch { /* ignore */ }
 }
 
 function loadCurrentCommit() {
@@ -45,28 +44,37 @@ function loadCurrentCommit() {
 
 function detectCurrentCommit() {
   const appDir = path.join(__dirname, '..');
-
-  // 1. Try .git directory (local dev or git-cloned deploy)
   try {
     if (fs.existsSync(path.join(appDir, '.git'))) {
       const sha = execSync('git rev-parse HEAD', { cwd: appDir }).toString().trim();
       if (sha) return sha;
     }
-  } catch { /* not a git repo or git not installed */ }
-
-  // 2. Try env variable (set via Dockerfile / docker-compose)
-  if (process.env.JEWEL_COMMIT) {
-    return process.env.JEWEL_COMMIT.trim();
-  }
-
-  // 3. Try saved commit file
+  } catch { /* not a git repo */ }
+  if (process.env.JEWEL_COMMIT) return process.env.JEWEL_COMMIT.trim();
   const saved = loadCurrentCommit();
   if (saved) return saved;
-
   return null;
 }
 
-async function getLatestCommit() {
+function detectCurrentDate() {
+  const appDir = path.join(__dirname, '..');
+  try {
+    if (fs.existsSync(path.join(appDir, '.git'))) {
+      const date = execSync('git log -1 --format=%cI', { cwd: appDir }).toString().trim();
+      if (date) return date;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function detectCurrentVersion() {
+  try {
+    const pkg = require('../package.json');
+    return pkg.version || 'unknown';
+  } catch { return 'unknown'; }
+}
+
+async function getLatestCommitInfo() {
   return new Promise((resolve) => {
     const options = {
       hostname: 'api.github.com',
@@ -84,7 +92,11 @@ async function getLatestCommit() {
         try {
           const parsed = JSON.parse(data);
           if (parsed.sha) {
-            resolve(parsed.sha);
+            resolve({
+              sha: parsed.sha,
+              date: parsed.commit?.committer?.date || null,
+              message: (parsed.commit?.message || '').split('\n')[0]
+            });
           } else {
             console.error('GitHub API unexpected response:', data.substring(0, 200));
             resolve(null);
@@ -109,10 +121,15 @@ async function checkForUpdate() {
   if (isUpdating()) return false;
 
   try {
+    const remote = await getLatestCommitInfo();
+    lastCheckTime = new Date().toISOString();
+
+    if (!remote) return false;
+
     const current = detectCurrentCommit();
     if (!current) {
-      const remote = await getLatestCommit();
-      if (remote) saveCurrentCommit(remote);
+      saveCurrentCommit(remote.sha);
+      latestRemoteInfo = remote;
       return false;
     }
 
@@ -120,17 +137,14 @@ async function checkForUpdate() {
       saveCurrentCommit(current);
     }
 
-    const remote = await getLatestCommit();
-    if (!remote) return false;
-
-    if (remote !== current) {
+    if (remote.sha !== current) {
       updateAvailable = true;
-      latestRemoteCommit = remote;
+      latestRemoteInfo = remote;
       return true;
     }
 
     updateAvailable = false;
-    latestRemoteCommit = null;
+    latestRemoteInfo = null;
     return false;
   } catch (err) {
     console.error('Check update error:', err.message);
@@ -142,43 +156,43 @@ function getUpdateInfo() {
   const current = detectCurrentCommit();
   return {
     available: updateAvailable,
+    currentVersion: detectCurrentVersion(),
     currentCommit: current || 'unknown',
-    latestCommit: latestRemoteCommit || 'unknown',
+    currentDate: detectCurrentDate(),
+    latestVersion: latestRemoteInfo ? detectLatestVersion(latestRemoteInfo.message) : null,
+    latestCommit: latestRemoteInfo?.sha || null,
+    latestDate: latestRemoteInfo?.date || null,
+    latestMessage: latestRemoteInfo?.message || null,
+    lastCheckTime: lastCheckTime,
     updating: isUpdating()
   };
 }
 
+function detectLatestVersion(message) {
+  if (!message) return null;
+  const match = message.match(/v?(\d+\.\d+\.\d+)/);
+  return match ? match[1] : null;
+}
+
 async function applyUpdate() {
-  if (updating) {
-    throw new Error('Update already in progress');
-  }
+  if (updating) throw new Error('Update already in progress');
 
   const appDir = path.join(__dirname, '..');
 
-  // 1. Git pull latest code
   execSync('git fetch origin main', { cwd: appDir, timeout: 60000 });
   execSync('git reset --hard origin/main', { cwd: appDir, timeout: 30000 });
 
-  // 2. Install dependencies
   try {
     execSync('npm ci --omit=dev', { cwd: appDir, timeout: 120000 });
   } catch {
-    try {
-      execSync('npm install --omit=dev', { cwd: appDir, timeout: 120000 });
-    } catch { /* non-critical */ }
+    try { execSync('npm install --omit=dev', { cwd: appDir, timeout: 120000 }); } catch { /* non-critical */ }
   }
 
-  // 3. Write updating flag so the new process knows to serve upgrading page
   updating = true;
-  try {
-    fs.writeFileSync(UPDATING_FILE, Date.now().toString(), 'utf-8');
-  } catch { /* ignore */ }
+  try { fs.writeFileSync(UPDATING_FILE, Date.now().toString(), 'utf-8'); } catch { /* ignore */ }
 
-  // 4. Spawn detached rebuild process: down -> up
-  //    This runs after our process exits, so the old container gets removed.
   const composePath = path.join(appDir, 'docker-compose.yml');
   if (fs.existsSync(composePath)) {
-    // Write a shell script to execute the rebuild
     const scriptPath = path.join(config.dataDir, 'jewel-rebuild.sh');
     const script = `#!/bin/sh
 cd "${appDir}"
@@ -199,7 +213,7 @@ docker compose up -d --build 2>/dev/null || docker-compose up -d --build 2>/dev/
   }
 
   updateAvailable = false;
-  latestRemoteCommit = null;
+  latestRemoteInfo = null;
 
   return { success: true, restarting: true };
 }

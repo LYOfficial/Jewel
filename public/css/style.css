@@ -419,6 +419,22 @@ textarea { resize: vertical; min-height: 80px; }
 }
 .cal-empty { padding: 6px 0; }
 
+/* ====== Update Table ====== */
+.update-table { width: 100%; }
+.update-table td { padding: 6px 0; font-size: 13px; vertical-align: top; }
+.update-table td:first-child { width: 100px; white-space: nowrap; padding-right: 12px; }
+.commit-sha {
+  display: inline-block;
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0 4px;
+}
+.commit-date { font-size: 11px; color: var(--text-muted); }
+
 /* ====== Footer ====== */
 .app-footer {
   padding: 12px 24px;

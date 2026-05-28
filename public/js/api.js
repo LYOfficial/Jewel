@@ -87,6 +87,7 @@ const API = {
   getSystemInfo() { return this.get('/system/info'); },
   getMonitor() { return this.get('/system/monitor'); },
   checkUpdate() { return this.get('/system/update/check'); },
+  forceCheckUpdate() { return this.post('/system/update/check'); },
   applyUpdate() { return this.post('/system/update/apply'); },
   getSettings() { return this.get('/system/settings'); },
   updateSettings(data) { return this.put('/system/settings', data); },

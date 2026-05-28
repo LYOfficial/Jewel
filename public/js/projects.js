@@ -193,9 +193,7 @@ const Projects = {
     try {
       const project = await API.getProject(id);
       const envVars = JSON.parse(project.env_vars || '{}');
-      const envRows = Object.entries(envVars).map(([k, v]) =>
-        `<div class="env-row"><input value="${esc(k)}" data-env-key><input value="${esc(v)}" data-env-val><span class="env-remove" onclick="this.parentElement.remove()">&times;</span></div>`
-      ).join('');
+      const envText = Object.entries(envVars).map(([k, v]) => `${k}=${v}`).join('\n');
 
       let tokenOptions = '';
       let hasMatchingToken = false;
@@ -251,8 +249,7 @@ const Projects = {
         </div>` : ''}
         <div class="form-group">
           <label data-i18n="project.envVars">环境变量</label>
-          <div class="env-editor" id="envEditor">${envRows}</div>
-          <button class="btn btn-sm" onclick="Projects.addEnvRow()" style="margin-top:8px" data-i18n="project.addEnv">添加变量</button>
+          <textarea id="envEditor" rows="8" placeholder="KEY=VALUE&#10;PORT=3000&#10;DB_HOST=localhost">${esc(envText)}</textarea>
         </div>
         <div class="form-group">
           <label data-i18n="project.logs">日志</label>
@@ -285,15 +282,6 @@ const Projects = {
     }
   },
 
-  addEnvRow() {
-    const editor = document.getElementById('envEditor');
-    if (!editor) return;
-    const row = document.createElement('div');
-    row.className = 'env-row';
-    row.innerHTML = `<input placeholder="KEY" data-env-key><input placeholder="VALUE" data-env-val><span class="env-remove" onclick="this.parentElement.remove()">&times;</span>`;
-    editor.appendChild(row);
-  },
-
   async saveProject(id) {
     const tokenSelect = document.getElementById('detailTokenSelect').value;
     let gitToken = '';
@@ -316,9 +304,14 @@ const Projects = {
     };
 
     const envVars = {};
-    document.querySelectorAll('#envEditor .env-row').forEach(row => {
-      const key = row.querySelector('[data-env-key]').value.trim();
-      const val = row.querySelector('[data-env-val]').value;
+    const envText = document.getElementById('envEditor').value;
+    envText.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) return;
+      const key = trimmed.substring(0, eqIdx).trim();
+      const val = trimmed.substring(eqIdx + 1);
       if (key) envVars[key] = val;
     });
 

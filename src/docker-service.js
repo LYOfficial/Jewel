@@ -94,6 +94,70 @@ async function getContainerStats(id) {
   });
 }
 
+function parseEnvFiles(composePath) {
+  const files = new Set();
+  try {
+    const content = fs.readFileSync(composePath, 'utf-8');
+    const doc = yaml.load(content);
+    const services = doc.services || {};
+    for (const svc of Object.values(services)) {
+      if (!svc.env_file) continue;
+      const entries = Array.isArray(svc.env_file) ? svc.env_file : [svc.env_file];
+      for (const entry of entries) {
+        // entry can be a string or an object with { path: ..., required: ... }
+        const p = typeof entry === 'string' ? entry : (entry.path || '');
+        if (p) files.add(p);
+      }
+    }
+  } catch { /* ignore parse errors */ }
+  return [...files];
+}
+
+function findEnvExample(projectDir, envPath) {
+  const basename = path.basename(envPath);
+  const dir = path.dirname(path.isAbsolute(envPath) ? envPath : path.join(projectDir, envPath));
+
+  // Look for .env.example, .env.sample, .env.template, .env.example.local, etc.
+  const candidates = [
+    basename + '.example',
+    basename + '.sample',
+    basename + '.template',
+    'env.example',
+    'env.sample'
+  ];
+
+  for (const c of candidates) {
+    const candidate = path.join(dir, c);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  // Also check the project root for any file with .env in the name (e.g. .env.production)
+  try {
+    const rootFiles = fs.readdirSync(projectDir);
+    const match = rootFiles.find(f =>
+      f.startsWith('.env') && f !== basename && !f.endsWith('.example') && !f.endsWith('.sample')
+    );
+    if (match) return path.join(projectDir, match);
+  } catch { /* ignore */ }
+
+  return null;
+}
+
+function ensureEnvFiles(projectDir, composePath) {
+  const envFiles = parseEnvFiles(composePath);
+  for (const envPath of envFiles) {
+    const absPath = path.isAbsolute(envPath) ? envPath : path.join(projectDir, envPath);
+    if (fs.existsSync(absPath)) continue;
+
+    const examplePath = findEnvExample(projectDir, envPath);
+    if (examplePath) {
+      fs.copyFileSync(examplePath, absPath);
+    } else {
+      fs.writeFileSync(absPath, '', 'utf-8');
+    }
+  }
+}
+
 async function deployProject(project) {
   const projectDir = path.join(
     process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
@@ -106,6 +170,9 @@ async function deployProject(project) {
     throw new Error(`docker-compose file not found: ${composePath}`);
   }
 
+  // Ensure all env_file references exist before compose up
+  ensureEnvFiles(projectDir, composePath);
+
   let envStr = '';
   try {
     const envVars = JSON.parse(project.env_vars || '{}');
@@ -114,8 +181,9 @@ async function deployProject(project) {
     }
   } catch { /* ignore */ }
 
+  // Always write .env so docker compose never fails on a missing env_file
   const envFile = path.join(projectDir, '.env');
-  if (envStr) fs.writeFileSync(envFile, envStr);
+  fs.writeFileSync(envFile, envStr || '', 'utf-8');
 
   const composeCmd = process.env.COMPOSE_CMD || 'docker compose';
   const cmd = `${composeCmd} -f "${composePath}" --project-name "${project.name}" up -d --build`;
@@ -182,5 +250,6 @@ module.exports = {
   deployProject,
   stopProject,
   getProjectContainers,
-  getDockerInfo
+  getDockerInfo,
+  ensureEnvFiles
 };

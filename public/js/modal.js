@@ -20,7 +20,7 @@ const Modal = {
 
     actions.forEach((a, i) => {
       overlay.querySelector(`[data-action="${i}"]`).addEventListener('click', () => {
-        a.onClick();
+        if (a.onClick) a.onClick();
         if (a.close !== false) this.close();
       });
     });

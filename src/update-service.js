@@ -1,4 +1,5 @@
 const https = require('https');
+const { spawn } = require('child_process');
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -7,8 +8,23 @@ const config = require('./config');
 let updateAvailable = false;
 let latestRemoteCommit = null;
 let currentCommit = null;
+let updating = false;
 
 const COMMIT_FILE = path.join(config.dataDir, '.jewel-commit');
+const UPDATING_FILE = path.join(config.dataDir, '.jewel-updating');
+
+function isUpdating() {
+  if (updating) return true;
+  try {
+    if (fs.existsSync(UPDATING_FILE)) return true;
+  } catch { /* ignore */ }
+  return false;
+}
+
+function clearUpdatingFlag() {
+  updating = false;
+  try { fs.unlinkSync(UPDATING_FILE); } catch { /* ignore */ }
+}
 
 function saveCurrentCommit(sha) {
   currentCommit = sha;
@@ -90,18 +106,16 @@ async function getLatestCommit() {
 }
 
 async function checkForUpdate() {
+  if (isUpdating()) return false;
+
   try {
     const current = detectCurrentCommit();
     if (!current) {
-      // First run or can't detect — fetch remote and save as baseline
       const remote = await getLatestCommit();
-      if (remote) {
-        saveCurrentCommit(remote);
-      }
+      if (remote) saveCurrentCommit(remote);
       return false;
     }
 
-    // Save on first detection
     if (!loadCurrentCommit()) {
       saveCurrentCommit(current);
     }
@@ -129,72 +143,72 @@ function getUpdateInfo() {
   return {
     available: updateAvailable,
     currentCommit: current || 'unknown',
-    latestCommit: latestRemoteCommit || 'unknown'
+    latestCommit: latestRemoteCommit || 'unknown',
+    updating: isUpdating()
   };
 }
 
 async function applyUpdate() {
+  if (updating) {
+    throw new Error('Update already in progress');
+  }
+
   const appDir = path.join(__dirname, '..');
 
+  // 1. Git pull latest code
+  execSync('git fetch origin main', { cwd: appDir, timeout: 60000 });
+  execSync('git reset --hard origin/main', { cwd: appDir, timeout: 30000 });
+
+  // 2. Install dependencies
   try {
-    // Fetch latest from remote
-    execSync('git fetch origin main', { cwd: appDir, timeout: 60000 });
-
-    // Reset to latest remote commit
-    execSync('git reset --hard origin/main', { cwd: appDir, timeout: 30000 });
-
-    // Update npm dependencies
+    execSync('npm ci --omit=dev', { cwd: appDir, timeout: 120000 });
+  } catch {
     try {
-      execSync('npm ci --production', { cwd: appDir, timeout: 120000 });
-    } catch {
-      try {
-        execSync('npm install --production', { cwd: appDir, timeout: 120000 });
-      } catch { /* non-critical */ }
-    }
-
-    // Rebuild and restart via docker compose
-    const composePath = path.join(appDir, 'docker-compose.yml');
-    if (fs.existsSync(composePath)) {
-      // Stop and remove old containers first
-      try {
-        execSync('docker compose down', { cwd: appDir, timeout: 120000 });
-      } catch {
-        try {
-          execSync('docker-compose down', { cwd: appDir, timeout: 120000 });
-        } catch { /* ignore */ }
-      }
-
-      let composeOk = false;
-      try {
-        execSync('docker compose up -d --build', { cwd: appDir, timeout: 300000 });
-        composeOk = true;
-      } catch { /* try v1 command */ }
-      if (!composeOk) {
-        try {
-          execSync('docker-compose up -d --build', { cwd: appDir, timeout: 300000 });
-          composeOk = true;
-        } catch (e) {
-          throw new Error('Docker compose rebuild failed: ' + e.message);
-        }
-      }
-    }
-
-    // Update saved commit
-    const newCommit = detectCurrentCommit() || latestRemoteCommit;
-    if (newCommit) saveCurrentCommit(newCommit);
-
-    updateAvailable = false;
-    latestRemoteCommit = null;
-
-    return { success: true, newCommit };
-  } catch (err) {
-    throw new Error('Update failed: ' + err.message);
+      execSync('npm install --omit=dev', { cwd: appDir, timeout: 120000 });
+    } catch { /* non-critical */ }
   }
+
+  // 3. Write updating flag so the new process knows to serve upgrading page
+  updating = true;
+  try {
+    fs.writeFileSync(UPDATING_FILE, Date.now().toString(), 'utf-8');
+  } catch { /* ignore */ }
+
+  // 4. Spawn detached rebuild process: down -> up
+  //    This runs after our process exits, so the old container gets removed.
+  const composePath = path.join(appDir, 'docker-compose.yml');
+  if (fs.existsSync(composePath)) {
+    // Write a shell script to execute the rebuild
+    const scriptPath = path.join(config.dataDir, 'jewel-rebuild.sh');
+    const script = `#!/bin/sh
+cd "${appDir}"
+docker compose down 2>/dev/null || docker-compose down 2>/dev/null
+docker compose up -d --build 2>/dev/null || docker-compose up -d --build 2>/dev/null
+`;
+    try {
+      fs.writeFileSync(scriptPath, script, 'utf-8');
+      fs.chmodSync(scriptPath, 0o755);
+    } catch { /* ignore */ }
+
+    const child = spawn('sh', [scriptPath], {
+      detached: true,
+      stdio: 'ignore',
+      cwd: appDir
+    });
+    child.unref();
+  }
+
+  updateAvailable = false;
+  latestRemoteCommit = null;
+
+  return { success: true, restarting: true };
 }
 
 module.exports = {
   checkForUpdate,
   isUpdateAvailable: () => updateAvailable,
+  isUpdating,
+  clearUpdatingFlag,
   getUpdateInfo,
   applyUpdate
 };

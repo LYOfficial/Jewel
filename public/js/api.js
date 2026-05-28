@@ -27,6 +27,11 @@ const API = {
       throw new Error('Unauthorized');
     }
 
+    if (res.status === 503) {
+      window.location.href = '/upgrading.html';
+      throw new Error('Service upgrading');
+    }
+
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Request failed');
     return data;

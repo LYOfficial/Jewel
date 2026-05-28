@@ -18,6 +18,14 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// If updating flag is set, serve upgrading page for all non-static requests
+app.use((req, res, next) => {
+  if (updateService.isUpdating() && !req.path.startsWith('/css') && !req.path.startsWith('/js') && !req.path.startsWith('/img') && !req.path.startsWith('/lang')) {
+    return res.status(503).sendFile(path.join(__dirname, '..', 'public', 'upgrading.html'));
+  }
+  next();
+});
+
 app.use('/api/auth', routesAuth);
 app.use('/api/projects', routesProjects);
 app.use('/api/containers', routesContainers);
@@ -58,6 +66,9 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 updateService.checkForUpdate().catch(() => {});
+
+// Clear stale updating flag on startup (means we successfully restarted after update)
+updateService.clearUpdatingFlag();
 
 app.listen(config.port, () => {
   console.log(`Jewel running on http://localhost:${config.port}`);

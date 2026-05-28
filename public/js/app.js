@@ -68,11 +68,15 @@ const App = {
     });
 
     document.getElementById('updateBanner').addEventListener('click', async () => {
-      if (!confirm(I18n.t('update.confirmApply') || 'Confirm update?')) return;
+      if (!confirm(I18n.t('update.confirmApply') || 'Confirm update? The service will restart.')) return;
       try {
         Notify.info(I18n.t('update.applying') || 'Updating...');
-        await API.applyUpdate();
-        Notify.success(I18n.t('update.applied') || 'Update applied');
+        const res = await API.applyUpdate();
+        if (res.restarting) {
+          window.location.href = '/upgrading.html';
+        } else {
+          Notify.success(I18n.t('update.applied') || 'Update applied');
+        }
       } catch (err) { Notify.error(err.message); }
     });
   },

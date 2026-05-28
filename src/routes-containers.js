@@ -50,10 +50,37 @@ router.post('/:id/stop', async (req, res) => {
   }
 });
 
+router.post('/:id/kill', async (req, res) => {
+  try {
+    await dockerService.killContainer(req.params.id);
+    res.json({ message: 'Container killed' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/:id/restart', async (req, res) => {
   try {
     await dockerService.restartContainer(req.params.id);
     res.json({ message: 'Container restarted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/pause', async (req, res) => {
+  try {
+    await dockerService.pauseContainer(req.params.id);
+    res.json({ message: 'Container paused' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/unpause', async (req, res) => {
+  try {
+    await dockerService.unpauseContainer(req.params.id);
+    res.json({ message: 'Container resumed' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -642,11 +642,77 @@ tr:hover { background: var(--bg-hover); }
 }
 .badge-running { background: rgba(68,204,68,0.15); color: var(--success); }
 .badge-stopped { background: rgba(153,153,153,0.15); color: var(--text-secondary); }
+.badge-paused { background: rgba(255,170,0,0.15); color: var(--warning); }
 .badge-error { background: rgba(255,68,68,0.15); color: var(--danger); }
 .badge-deploying { background: rgba(68,136,255,0.15); color: var(--info); }
 .badge-idle { background: rgba(153,153,153,0.1); color: var(--text-muted); }
 .badge-ready { background: rgba(68,204,68,0.1); color: var(--success); }
 .badge-cloning { background: rgba(255,170,0,0.15); color: var(--warning); }
+
+/* ====== Status Dropdown ====== */
+.status-dropdown {
+  position: relative;
+  display: inline-block;
+}
+.status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: filter 0.15s;
+}
+.status-btn:hover { filter: brightness(1.2); }
+.status-btn.badge-running { background: rgba(68,204,68,0.15); color: var(--success); }
+.status-btn.badge-stopped { background: rgba(153,153,153,0.15); color: var(--text-secondary); }
+.status-btn.badge-paused { background: rgba(255,170,0,0.15); color: var(--warning); }
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-running { background: #4c4; }
+.dot-stopped { background: #999; }
+.dot-paused { background: #fa0; }
+.status-label { text-transform: capitalize; }
+.status-arrow { font-size: 9px; opacity: 0.6; margin-left: 2px; }
+.status-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  min-width: 140px;
+  z-index: 100;
+  padding: 4px 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.status-menu.open { display: block; }
+.status-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-size: 12px;
+  color: #ccc;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.status-menu-item:hover { background: #252525; color: #f0f0f0; }
+.status-menu-item.danger { color: #e55; }
+.status-menu-item.danger:hover { background: rgba(255,68,68,0.1); color: #f77; }
+.mi-icon { font-size: 11px; width: 14px; text-align: center; }
+.play-icon { color: #4c4; }
+.stop-icon { color: #e55; }
+.restart-icon { color: #6af; }
+.pause-icon { color: #fa0; }
 
 /* ====== Modal ====== */
 .modal {

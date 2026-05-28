@@ -19,6 +19,11 @@ const Containers = {
     document.getElementById('showAllContainers').addEventListener('change', () => this.loadList());
     document.getElementById('refreshContainers').addEventListener('click', () => this.loadList());
 
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.status-dropdown')) this.closeAllMenus();
+    });
+
     await this.loadList();
     this.refreshTimer = setInterval(() => this.loadList(), 30000);
   },
@@ -54,19 +59,54 @@ const Containers = {
         <tbody>${containers.map(c => {
           const ports = (c.Ports || []).map(p => p.PublicPort ? `${p.PublicPort}:${p.PrivatePort}` : '').filter(Boolean).join(', ');
           const mountCount = (c.Mounts || []).length;
+          const state = c.State || 'unknown';
+          const badgeClass = state === 'running' ? 'running' : state === 'paused' ? 'paused' : 'stopped';
           return `
           <tr>
             <td>${esc((c.Names && c.Names[0]) || '-').replace(/^\//, '')}</td>
             <td><small>${esc(c.Image || '-')}</small></td>
-            <td><span class="badge badge-${c.State === 'running' ? 'running' : 'stopped'}">${esc(c.State || '-')}</span></td>
+            <td>
+              <div class="status-dropdown" data-id="${c.Id}">
+                <button class="status-btn badge-${badgeClass}" onclick="Containers.toggleMenu('${c.Id}')">
+                  <span class="status-dot dot-${badgeClass}"></span>
+                  <span class="status-label">${esc(state)}</span>
+                  <span class="status-arrow">&#9662;</span>
+                </button>
+                <div class="status-menu" id="menu-${c.Id}">
+                  ${state === 'running' ? `
+                  <div class="status-menu-item" onclick="Containers.stop('${c.Id}')">
+                    <span class="mi-icon stop-icon">&#9632;</span> <span data-i18n="container.stop">停止</span>
+                  </div>
+                  <div class="status-menu-item danger" onclick="Containers.forceStop('${c.Id}')">
+                    <span class="mi-icon stop-icon">&#9632;</span> <span data-i18n="container.forceStop">强制停止</span>
+                  </div>
+                  <div class="status-menu-item" onclick="Containers.restart('${c.Id}')">
+                    <span class="mi-icon restart-icon">&#8635;</span> <span data-i18n="container.restart">重启</span>
+                  </div>
+                  <div class="status-menu-item" onclick="Containers.pause('${c.Id}')">
+                    <span class="mi-icon pause-icon">&#10074;&#10074;</span> <span data-i18n="container.pause">暂停</span>
+                  </div>
+                  ` : state === 'paused' ? `
+                  <div class="status-menu-item" onclick="Containers.unpause('${c.Id}')">
+                    <span class="mi-icon play-icon">&#9654;</span> <span data-i18n="container.unpause">恢复</span>
+                  </div>
+                  <div class="status-menu-item" onclick="Containers.stop('${c.Id}')">
+                    <span class="mi-icon stop-icon">&#9632;</span> <span data-i18n="container.stop">停止</span>
+                  </div>
+                  <div class="status-menu-item danger" onclick="Containers.forceStop('${c.Id}')">
+                    <span class="mi-icon stop-icon">&#9632;</span> <span data-i18n="container.forceStop">强制停止</span>
+                  </div>
+                  ` : `
+                  <div class="status-menu-item" onclick="Containers.start('${c.Id}')">
+                    <span class="mi-icon play-icon">&#9654;</span> <span data-i18n="container.start">启动</span>
+                  </div>
+                  `}
+                </div>
+              </div>
+            </td>
             <td><small>${ports || '-'}</small></td>
             <td>${mountCount > 0 ? `<span class="badge badge-ready">${mountCount}</span>` : '-'}</td>
             <td class="action-cell">
-              ${c.State === 'running' ?
-                `<button class="btn btn-sm" onclick="Containers.stop('${c.Id}')" data-i18n="container.stop">停止</button>
-                 <button class="btn btn-sm" onclick="Containers.restart('${c.Id}')" data-i18n="container.restart">重启</button>` :
-                `<button class="btn btn-sm" onclick="Containers.start('${c.Id}')" data-i18n="container.start">启动</button>`
-              }
               <button class="btn btn-sm" onclick="Containers.showLogs('${c.Id}')" data-i18n="container.logs">日志</button>
               <button class="btn btn-sm" onclick="Containers.showTerminal('${c.Id}')" data-i18n="container.terminal">终端</button>
               <button class="btn btn-sm" onclick="Containers.showFileManager('${c.Id}')" data-i18n="container.files">文件</button>
@@ -83,17 +123,44 @@ const Containers = {
   },
 
   async start(id) {
+    this.closeAllMenus();
     try { await API.startContainer(id); Notify.success(I18n.t('container.started') || 'Container started'); this.loadList(); } catch (err) { Notify.error(err.message); }
   },
   async stop(id) {
+    this.closeAllMenus();
     try { await API.stopContainer(id); Notify.success(I18n.t('container.stopped') || 'Container stopped'); this.loadList(); } catch (err) { Notify.error(err.message); }
   },
+  async forceStop(id) {
+    this.closeAllMenus();
+    try { await API.killContainer(id); Notify.success(I18n.t('container.forceStopped') || 'Container force stopped'); this.loadList(); } catch (err) { Notify.error(err.message); }
+  },
   async restart(id) {
+    this.closeAllMenus();
     try { await API.restartContainer(id); Notify.success(I18n.t('container.restarted') || 'Container restarted'); this.loadList(); } catch (err) { Notify.error(err.message); }
+  },
+  async pause(id) {
+    this.closeAllMenus();
+    try { await API.pauseContainer(id); Notify.success(I18n.t('container.paused') || 'Container paused'); this.loadList(); } catch (err) { Notify.error(err.message); }
+  },
+  async unpause(id) {
+    this.closeAllMenus();
+    try { await API.unpauseContainer(id); Notify.success(I18n.t('container.resumed') || 'Container resumed'); this.loadList(); } catch (err) { Notify.error(err.message); }
   },
   async remove(id) {
     if (!confirm(I18n.t('container.confirmRemove') || 'Are you sure?')) return;
     try { await API.removeContainer(id, true); Notify.success(I18n.t('container.removed') || 'Container removed'); this.loadList(); } catch (err) { Notify.error(err.message); }
+  },
+
+  toggleMenu(id) {
+    const menu = document.getElementById(`menu-${id}`);
+    if (!menu) return;
+    const isOpen = menu.classList.contains('open');
+    this.closeAllMenus();
+    if (!isOpen) menu.classList.add('open');
+  },
+
+  closeAllMenus() {
+    document.querySelectorAll('.status-menu.open').forEach(m => m.classList.remove('open'));
   },
 
   async showLogs(id) {

@@ -68,9 +68,24 @@ async function stopContainer(id) {
   return container.stop();
 }
 
+async function killContainer(id) {
+  const container = await getContainer(id);
+  return container.kill();
+}
+
 async function restartContainer(id) {
   const container = await getContainer(id);
   return container.restart();
+}
+
+async function pauseContainer(id) {
+  const container = await getContainer(id);
+  return container.pause();
+}
+
+async function unpauseContainer(id) {
+  const container = await getContainer(id);
+  return container.unpause();
 }
 
 async function removeContainer(id, force = false) {
@@ -244,7 +259,10 @@ module.exports = {
   getContainerInfo,
   startContainer,
   stopContainer,
+  killContainer,
   restartContainer,
+  pauseContainer,
+  unpauseContainer,
   removeContainer,
   getContainerLogs,
   getContainerStats,

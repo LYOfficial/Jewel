@@ -9,6 +9,10 @@ RUN npm ci --production
 
 COPY . .
 
+# Inject current git commit SHA at build time
+ARG JEWEL_COMMIT=unknown
+ENV JEWEL_COMMIT=${JEWEL_COMMIT}
+
 RUN mkdir -p /data/projects
 
 ENV NODE_ENV=production

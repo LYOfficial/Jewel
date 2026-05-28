@@ -36,10 +36,13 @@ Jewel は Dokploy と Portainer にインスパイアされた軽量な Git to D
 ```bash
 git clone https://github.com/LYOfficial/Jewel.git
 cd Jewel
-docker compose up -d
+export JEWEL_COMMIT=$(git rev-parse HEAD)
+docker compose up -d --build
 ```
 
 `http://localhost:330` にアクセスして開始します。
+
+> `JEWEL_COMMIT` はバージョン検出に使用され、Jewel が現在のバージョンを認識し、新しいコミットがプッシュされたときに更新を促すことができます。
 
 ### ローカル実行
 

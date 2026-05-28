@@ -36,10 +36,13 @@ Jewel 是一个轻量级的 Git 到 Docker 集成部署平台，灵感来源于 
 ```bash
 git clone https://github.com/LYOfficial/Jewel.git
 cd Jewel
-docker compose up -d
+export JEWEL_COMMIT=$(git rev-parse HEAD)
+docker compose up -d --build
 ```
 
 访问 `http://localhost:330` 即可使用。
+
+> `JEWEL_COMMIT` 用于版本检测，使得 Jewel 能识别当前版本并在有新提交时提示更新。
 
 ### 本地运行
 

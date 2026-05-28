@@ -2,7 +2,10 @@ version: '3.8'
 
 services:
   jewel:
-    build: .
+    build:
+      context: .
+      args:
+        JEWEL_COMMIT: ${JEWEL_COMMIT:-latest}
     image: jewel:latest
     container_name: jewel
     ports:
@@ -15,6 +18,7 @@ services:
       - DATA_DIR=/data
       - PORT=330
       - JWT_SECRET=change-this-in-production
+      - JEWEL_COMMIT=${JEWEL_COMMIT:-latest}
     restart: unless-stopped
 
 volumes:

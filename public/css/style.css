@@ -163,6 +163,7 @@ textarea { resize: vertical; min-height: 80px; }
 }
 
 .login-brand { text-align: center; position: relative; z-index: 1; }
+.login-logo { width: 80px; height: 80px; margin-bottom: 16px; }
 .login-title { font-size: 48px; font-weight: 200; letter-spacing: 12px; color: var(--text-primary); }
 .login-subtitle { color: var(--text-muted); margin-top: 12px; font-size: 14px; letter-spacing: 1px; }
 
@@ -218,6 +219,11 @@ textarea { resize: vertical; min-height: 80px; }
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.sidebar-logo {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
 }
 .sidebar-brand h1 {
   font-size: 20px;

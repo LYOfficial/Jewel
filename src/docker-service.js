@@ -237,6 +237,7 @@ async function getDockerInfo() {
 }
 
 module.exports = {
+  getDocker,
   isDockerAvailable,
   listContainers,
   getContainer,

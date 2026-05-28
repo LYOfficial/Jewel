@@ -4,6 +4,7 @@ const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const config = require('./config');
+const dockerService = require('./docker-service');
 
 let updateAvailable = false;
 let latestRemoteInfo = null;
@@ -224,63 +225,65 @@ async function applyUpdate() {
   return { success: true, restarting: true };
 }
 
-function scheduleRestart() {
+async function scheduleRestart() {
   if (!updating) throw new Error('No update in progress');
 
   const appDir = path.join(__dirname, '..');
   const composePath = path.join(appDir, 'docker-compose.yml');
   if (!fs.existsSync(composePath)) throw new Error('docker-compose.yml not found');
 
-  // We cannot simply spawn a child process with `sleep && docker compose up`
-  // because when this container stops, all its child processes are killed too
-  // (they share the container's PID namespace).
-  //
-  // Strategy: use the mounted Docker socket to launch a short-lived "helper"
-  // container on the host. That container sleeps briefly (giving this container
-  // time to shut down), then runs `docker compose up` to recreate this
-  // container with the freshly built image.
-  //
-  // The helper needs the compose file, which we copy to the shared data volume
-  // that both containers can access.
+  // Use dockerode to talk to the Docker daemon via the mounted socket.
+  // This is more reliable than spawning `docker run` CLI commands.
+  const docker = dockerService.getDocker();
 
-  // 1. Copy compose file to the data volume
+  // 1. Inspect the current container to discover volume names and compose project
+  const hostname = process.env.HOSTNAME;
+  if (!hostname) throw new Error('Cannot detect container hostname (HOSTNAME env not set)');
+
+  const currentContainer = docker.getContainer(hostname);
+  const info = await currentContainer.inspect();
+
+  // 2. Get compose project name from container labels
+  const projectName = (info.Config?.Labels?.['com.docker.compose.project']) || 'jewel';
+
+  // 3. Find the real volume name for /data (compose prefixes volume names)
+  const dataMount = (info.Mounts || []).find(m => m.Destination === '/data');
+  const dataVolumeName = dataMount ? (dataMount.Name || dataMount.Source) : null;
+
+  // 4. Copy compose file to the data volume so the helper can read it
   const composeContent = fs.readFileSync(composePath, 'utf-8');
   const composeCopy = path.join(config.dataDir, 'jewel-compose.yml');
   fs.writeFileSync(composeCopy, composeContent, 'utf-8');
 
-  // 2. Detect the compose project name from this container's labels
-  let projectName = 'jewel';
-  try {
-    const hostname = process.env.HOSTNAME;
-    if (hostname) {
-      const label = execSync(
-        `docker inspect ${hostname} --format '{{index .Config.Labels "com.docker.compose.project"}}'`,
-        { timeout: 5000 }
-      ).toString().trim();
-      if (label) projectName = label;
-    }
-  } catch { /* use default */ }
-
-  // 3. Build the helper command
-  const cmd = [
+  // 5. Build the command the helper container will execute:
+  //    wait for this container to die, then recreate it with the new image
+  const helperCmd = [
     'sleep 3',
     `docker compose -p ${projectName} -f /data/jewel-compose.yml up -d --no-build --force-recreate`,
     'rm -f /data/jewel-compose.yml'
   ].join(' && ');
 
-  // 4. Launch helper container
-  const child = spawn('docker', [
-    'run', '--rm',
-    '--name', 'jewel-restart-helper',
-    '-v', '/var/run/docker.sock:/var/run/docker.sock',
-    '-v', 'jewel-data:/data',
-    'docker:cli',
-    'sh', '-c', cmd
-  ], {
-    detached: true,
-    stdio: 'ignore'
+  // 6. Create the helper container via Docker API
+  const binds = ['/var/run/docker.sock:/var/run/docker.sock'];
+  if (dataVolumeName) binds.push(`${dataVolumeName}:/data`);
+
+  const helper = await docker.createContainer({
+    Image: 'jewel:latest',   // use our own image (has docker-cli installed, guaranteed to exist after build)
+    Cmd: ['sh', '-c', helperCmd],
+    name: 'jewel-restart-helper',
+    HostConfig: {
+      AutoRemove: true,
+      Binds: binds
+    }
   });
-  child.unref();
+
+  await helper.start();
+
+  // 7. CRITICAL: set restart policy to "no" on the current container.
+  //    Without this, Docker's "restart: unless-stopped" would restart the OLD
+  //    container immediately after process.exit(0), and the helper's
+  //    `docker compose up --force-recreate` would race with that restart.
+  await currentContainer.update({ RestartPolicy: { Name: 'no' } });
 
   updateAvailable = false;
   latestRemoteInfo = null;

@@ -188,9 +188,9 @@ router.post('/update/apply', async (req, res) => {
   }
 });
 
-router.post('/update/restart', (req, res) => {
+router.post('/update/restart', async (req, res) => {
   try {
-    const result = updateService.scheduleRestart();
+    const result = await updateService.scheduleRestart();
     res.json(result);
     // Shut down this container after a brief delay to let the response send
     setTimeout(() => process.exit(0), 500);

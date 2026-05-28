@@ -93,6 +93,7 @@ const App = {
     container.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
 
     if (Containers.destroy) Containers.destroy();
+    if (Dashboard.destroy) Dashboard.destroy();
 
     switch (page) {
       case 'dashboard': Dashboard.render(container); break;

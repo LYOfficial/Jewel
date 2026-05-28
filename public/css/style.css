@@ -293,6 +293,156 @@ textarea { resize: vertical; min-height: 80px; }
   color: var(--text-muted);
 }
 
+/* ====== Dashboard ====== */
+.sys-info-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.sys-info-bar span {
+  white-space: nowrap;
+}
+
+.monitor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.ring-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  text-align: center;
+}
+.ring-wrap { margin-bottom: 8px; }
+.ring-label { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+.ring-value { font-size: 13px; color: var(--text-secondary); }
+
+.net-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.net-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.net-label { font-size: 12px; color: var(--text-muted); }
+.net-val { font-size: 14px; font-weight: 500; }
+
+.dash-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.dash-half { min-width: 0; }
+
+/* Notebook */
+.notebook-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius);
+  padding: 2px;
+}
+.notebook-tab {
+  padding: 4px 10px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.notebook-tab:hover { color: var(--text-primary); }
+.notebook-tab.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.note-editor {
+  width: 100%;
+  min-height: 200px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 12px;
+  resize: vertical;
+  outline: none;
+}
+.note-editor:focus { border-color: var(--border-focus); }
+
+/* Calendar */
+.calendar { padding: 4px; }
+.cal-header {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+.cal-dayname {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+.cal-day {
+  font-size: 13px;
+  padding: 6px 0;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: default;
+}
+.cal-day:hover { background: var(--bg-hover); }
+.cal-today {
+  background: var(--accent) !important;
+  color: var(--bg-primary) !important;
+  font-weight: 600;
+}
+.cal-empty { padding: 6px 0; }
+
+/* ====== Footer ====== */
+.app-footer {
+  padding: 12px 24px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+.app-footer a {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+.app-footer a:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .monitor-grid { grid-template-columns: 1fr; }
+  .net-stats { grid-template-columns: repeat(2, 1fr); }
+  .dash-row { grid-template-columns: 1fr; }
+}
+
 /* ====== Main Content ====== */
 .main-content {
   flex: 1;

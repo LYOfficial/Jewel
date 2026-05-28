@@ -85,8 +85,11 @@ const API = {
 
   // System
   getSystemInfo() { return this.get('/system/info'); },
+  getMonitor() { return this.get('/system/monitor'); },
   checkUpdate() { return this.get('/system/update/check'); },
   applyUpdate() { return this.post('/system/update/apply'); },
   getSettings() { return this.get('/system/settings'); },
-  updateSettings(data) { return this.put('/system/settings', data); }
+  updateSettings(data) { return this.put('/system/settings', data); },
+  getNotes() { return this.get('/system/notes'); },
+  updateNotes(data) { return this.put('/system/notes', data); }
 };

@@ -192,25 +192,95 @@ async function applyUpdate() {
   try { fs.writeFileSync(UPDATING_FILE, Date.now().toString(), 'utf-8'); } catch { /* ignore */ }
 
   const composePath = path.join(appDir, 'docker-compose.yml');
-  if (fs.existsSync(composePath)) {
-    const scriptPath = path.join(config.dataDir, 'jewel-rebuild.sh');
-    const script = `#!/bin/sh
-cd "${appDir}"
-docker compose down 2>/dev/null || docker-compose down 2>/dev/null
-docker compose up -d --build 2>/dev/null || docker-compose up -d --build 2>/dev/null
-`;
-    try {
-      fs.writeFileSync(scriptPath, script, 'utf-8');
-      fs.chmodSync(scriptPath, 0o755);
-    } catch { /* ignore */ }
+  const isDocker = fs.existsSync(composePath);
 
-    const child = spawn('sh', [scriptPath], {
-      detached: true,
-      stdio: 'ignore',
-      cwd: appDir
-    });
-    child.unref();
+  if (isDocker) {
+    // Phase 1: build the new image without restarting
+    try {
+      execSync('docker compose build --no-cache 2>/dev/null || docker-compose build --no-cache 2>/dev/null', {
+        cwd: appDir, timeout: 600000, stdio: 'pipe'
+      });
+    } catch (err) {
+      updating = false;
+      try { fs.unlinkSync(UPDATING_FILE); } catch { /* ignore */ }
+      throw new Error('Docker image build failed: ' + err.message);
+    }
+    // Image built successfully — client will show restart button
+    return { success: true, needsRestart: true };
   }
+
+  // Non-Docker: restart the Node process directly
+  const child = spawn(process.argv[0], [path.join(appDir, 'src', 'index.js')], {
+    detached: true,
+    stdio: 'ignore',
+    cwd: appDir,
+    env: { ...process.env, NODE_ENV: 'production' }
+  });
+  child.unref();
+
+  updateAvailable = false;
+  latestRemoteInfo = null;
+
+  return { success: true, restarting: true };
+}
+
+function scheduleRestart() {
+  if (!updating) throw new Error('No update in progress');
+
+  const appDir = path.join(__dirname, '..');
+  const composePath = path.join(appDir, 'docker-compose.yml');
+  if (!fs.existsSync(composePath)) throw new Error('docker-compose.yml not found');
+
+  // We cannot simply spawn a child process with `sleep && docker compose up`
+  // because when this container stops, all its child processes are killed too
+  // (they share the container's PID namespace).
+  //
+  // Strategy: use the mounted Docker socket to launch a short-lived "helper"
+  // container on the host. That container sleeps briefly (giving this container
+  // time to shut down), then runs `docker compose up` to recreate this
+  // container with the freshly built image.
+  //
+  // The helper needs the compose file, which we copy to the shared data volume
+  // that both containers can access.
+
+  // 1. Copy compose file to the data volume
+  const composeContent = fs.readFileSync(composePath, 'utf-8');
+  const composeCopy = path.join(config.dataDir, 'jewel-compose.yml');
+  fs.writeFileSync(composeCopy, composeContent, 'utf-8');
+
+  // 2. Detect the compose project name from this container's labels
+  let projectName = 'jewel';
+  try {
+    const hostname = process.env.HOSTNAME;
+    if (hostname) {
+      const label = execSync(
+        `docker inspect ${hostname} --format '{{index .Config.Labels "com.docker.compose.project"}}'`,
+        { timeout: 5000 }
+      ).toString().trim();
+      if (label) projectName = label;
+    }
+  } catch { /* use default */ }
+
+  // 3. Build the helper command
+  const cmd = [
+    'sleep 3',
+    `docker compose -p ${projectName} -f /data/jewel-compose.yml up -d --no-build --force-recreate`,
+    'rm -f /data/jewel-compose.yml'
+  ].join(' && ');
+
+  // 4. Launch helper container
+  const child = spawn('docker', [
+    'run', '--rm',
+    '--name', 'jewel-restart-helper',
+    '-v', '/var/run/docker.sock:/var/run/docker.sock',
+    '-v', 'jewel-data:/data',
+    'docker:cli',
+    'sh', '-c', cmd
+  ], {
+    detached: true,
+    stdio: 'ignore'
+  });
+  child.unref();
 
   updateAvailable = false;
   latestRemoteInfo = null;
@@ -224,5 +294,6 @@ module.exports = {
   isUpdating,
   clearUpdatingFlag,
   getUpdateInfo,
-  applyUpdate
+  applyUpdate,
+  scheduleRestart
 };

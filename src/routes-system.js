@@ -188,6 +188,17 @@ router.post('/update/apply', async (req, res) => {
   }
 });
 
+router.post('/update/restart', (req, res) => {
+  try {
+    const result = updateService.scheduleRestart();
+    res.json(result);
+    // Shut down this container after a brief delay to let the response send
+    setTimeout(() => process.exit(0), 500);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/settings', (req, res) => {
   const settings = db.prepare('SELECT * FROM settings').all();
   const obj = {};

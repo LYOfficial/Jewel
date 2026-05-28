@@ -15,10 +15,10 @@
       align-items: center;
       justify-content: center;
     }
-    .container { text-align: center; }
+    .container { text-align: center; max-width: 480px; padding: 0 24px; }
     .icon { width: 64px; height: 64px; margin-bottom: 24px; opacity: 0.6; }
     h1 { font-weight: 300; font-size: 24px; letter-spacing: 4px; margin-bottom: 12px; }
-    p { color: #999; font-size: 14px; margin-bottom: 32px; }
+    .status-text { color: #999; font-size: 14px; margin-bottom: 32px; line-height: 1.6; }
     .spinner {
       display: inline-block;
       width: 32px; height: 32px;
@@ -28,22 +28,167 @@
       animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .btn-restart {
+      display: none;
+      padding: 12px 36px;
+      font-size: 15px;
+      font-weight: 500;
+      color: #0a0a0a;
+      background: #f0f0f0;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn-restart:hover { background: #fff; }
+    .btn-restart:active { transform: scale(0.97); }
+    .btn-restart.show { display: inline-block; }
+    .error-msg {
+      display: none;
+      color: #e74c3c;
+      font-size: 13px;
+      margin-top: 16px;
+      line-height: 1.5;
+    }
+    .error-msg.show { display: block; }
+    .phase { display: none; }
+    .phase.active { display: block; }
+    .step-indicator {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .step {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #2a2a2a;
+      transition: background 0.3s;
+    }
+    .step.done { background: #4caf50; }
+    .step.current { background: #f0f0f0; }
   </style>
 </head>
 <body>
   <div class="container">
     <img src="/img/jewel.svg" alt="Jewel" class="icon">
     <h1>Jewel</h1>
-    <p>System is upgrading, please wait...</p>
-    <div class="spinner"></div>
+
+    <div class="step-indicator">
+      <div class="step current" id="step1"></div>
+      <div class="step" id="step2"></div>
+    </div>
+
+    <!-- Phase 1: Building -->
+    <div class="phase active" id="phaseBuild">
+      <p class="status-text">Building new image, please wait...</p>
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Phase 2: Ready to restart -->
+    <div class="phase" id="phaseRestart">
+      <p class="status-text">New image is ready. Click the button below to restart the container.</p>
+      <button class="btn-restart show" id="restartBtn">Restart Now</button>
+      <p class="error-msg" id="errorMsg"></p>
+    </div>
+
+    <!-- Phase 3: Restarting -->
+    <div class="phase" id="phaseRestarting">
+      <p class="status-text">Container is restarting, please wait...</p>
+      <div class="spinner"></div>
+    </div>
   </div>
+
   <script>
-    // Auto-retry every 5s until the service comes back
-    setInterval(() => {
-      fetch('/api/system/info').then(r => {
-        if (r.ok) window.location.href = '/';
-      }).catch(() => {});
-    }, 5000);
+    const token = localStorage.getItem('jewel-token');
+    const params = new URLSearchParams(window.location.search);
+    const phase = params.get('phase');
+
+    function showPhase(id) {
+      document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    function updateSteps(current) {
+      const s1 = document.getElementById('step1');
+      const s2 = document.getElementById('step2');
+      if (current >= 1) { s1.classList.add('done'); s1.classList.remove('current'); }
+      if (current === 0) { s1.classList.add('current'); }
+      if (current >= 2) { s2.classList.add('done'); s2.classList.remove('current'); }
+      if (current === 1) { s2.classList.add('current'); }
+    }
+
+    // If we arrive with ?phase=restart, skip to the restart phase
+    if (phase === 'restart') {
+      showPhase('phaseRestart');
+      updateSteps(1);
+      pollForService();
+    } else if (phase === 'built') {
+      // Image already built, show restart button
+      showPhase('phaseRestart');
+      updateSteps(1);
+    } else {
+      // Default: poll for build completion
+      pollForBuild();
+    }
+
+    // Poll until the /update/apply API returns (meaning build is done)
+    // In the normal flow, applyUpdate is called BEFORE redirecting here,
+    // so we just need to check if the server reports needsRestart
+    function pollForBuild() {
+      const interval = setInterval(async () => {
+        try {
+          const headers = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+          const res = await fetch('/api/system/update/check', { headers });
+          if (!res.ok) throw new Error('not ok');
+          const info = await res.json();
+          if (info.updating) {
+            // Build still in progress, keep waiting
+            return;
+          }
+          clearInterval(interval);
+          // Build finished — show restart button
+          showPhase('phaseRestart');
+          updateSteps(1);
+        } catch {
+          // Server might be temporarily unavailable during build
+        }
+      }, 3000);
+    }
+
+    document.getElementById('restartBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('restartBtn');
+      const errEl = document.getElementById('errorMsg');
+      btn.disabled = true;
+      btn.textContent = 'Restarting...';
+      errEl.classList.remove('show');
+
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        await fetch('/api/system/update/restart', { method: 'POST', headers });
+      } catch {
+        // Expected: connection will be lost as the container shuts down
+      }
+
+      // Switch to restarting phase
+      showPhase('phaseRestarting');
+      updateSteps(2);
+      pollForService();
+    });
+
+    function pollForService() {
+      const interval = setInterval(() => {
+        fetch('/api/system/info').then(r => {
+          if (r.ok) {
+            clearInterval(interval);
+            window.location.href = '/';
+          }
+        }).catch(() => {});
+      }, 5000);
+    }
   </script>
 </body>
 </html>

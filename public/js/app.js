@@ -72,8 +72,10 @@ const App = {
       try {
         Notify.info(I18n.t('update.applying') || 'Updating...');
         const res = await API.applyUpdate();
-        if (res.restarting) {
-          window.location.href = '/upgrading.html';
+        if (res.needsRestart) {
+          window.location.href = '/upgrading.html?phase=built';
+        } else if (res.restarting) {
+          window.location.href = '/upgrading.html?phase=restart';
         } else {
           Notify.success(I18n.t('update.applied') || 'Update applied');
         }

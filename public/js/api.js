@@ -70,6 +70,14 @@ const API = {
   removeContainer(id, force = false) { return this.del(`/containers/${id}?force=${force}`); },
   getContainerLogs(id, tail = 100) { return this.get(`/containers/${id}/logs?tail=${tail}`); },
   getContainerStats(id) { return this.get(`/containers/${id}/stats`); },
+  getContainerMounts(id) { return this.get(`/containers/${id}/mounts`); },
+  execInContainer(id, cmd) { return this.post(`/containers/${id}/exec`, { cmd }); },
+  getContainerFiles(id, p = '/') { return this.get(`/containers/${id}/files?path=${encodeURIComponent(p)}`); },
+  getContainerFile(id, p) { return this.get(`/containers/${id}/file?path=${encodeURIComponent(p)}`); },
+  saveContainerFile(id, p, content) { return this.put(`/containers/${id}/file`, { path: p, content }); },
+  deleteContainerFile(id, p) { return this.del(`/containers/${id}/file?path=${encodeURIComponent(p)}`); },
+  uploadToContainer(id, p, b64) { return this.post(`/containers/${id}/upload`, { path: p, content: b64 }); },
+  browseHost(p = '/') { return this.get(`/containers/host/browse?path=${encodeURIComponent(p)}`); },
 
   // Git
   getGitRepos(token, provider, host) {

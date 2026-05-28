@@ -87,7 +87,7 @@ const Dashboard = {
       // System info bar
       const si = document.getElementById('sysInfoContent');
       if (si) si.innerHTML = `
-        <span>${esc(m.hostname || '-')} · ${esc(m.osType || '-')} ${esc(m.osRelease || '')} · ${esc(m.osArch || '-')}</span>
+        <span>${esc(m.osType || '-')} ${esc(m.osRelease || '')} · ${esc(m.osArch || '-')}</span>
         <span>CPU: ${esc(m.cpuModel || '-')} x${m.cpuCores || '-'}</span>
         <span data-i18n="dashboard.uptime">运行</span>: ${formatUptime(m.uptime)}
       `;

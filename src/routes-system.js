@@ -32,11 +32,6 @@ router.get('/monitor', (req, res) => {
   const freeMem = os.freemem();
   const usedMem = totalMem - freeMem;
 
-  // CPU usage: average across all cores
-  const cpuUsage = process.cpuUsage();
-  const elapsed = process.uptime() * 1000;
-  const cpuPercent = Math.min(100, ((cpuUsage.user + cpuUsage.system) / elapsed) * 100);
-
   res.json({
     hostname: os.hostname(),
     osType: os.type(),
@@ -44,7 +39,7 @@ router.get('/monitor', (req, res) => {
     osArch: os.arch(),
     cpuModel: cpus[0]?.model || 'Unknown',
     cpuCores: cpus.length,
-    cpuPercent: Math.round(cpuPercent * 10) / 10,
+    cpuPercent: getCpuPercent(),
     memTotal: totalMem,
     memUsed: usedMem,
     memPercent: Math.round((usedMem / totalMem) * 1000) / 10,
@@ -53,6 +48,32 @@ router.get('/monitor', (req, res) => {
     uptime: os.uptime()
   });
 });
+
+let prevCpuTimes = null;
+
+function getCpuPercent() {
+  const cpus = os.cpus();
+  let totalIdle = 0, totalTick = 0;
+  for (const cpu of cpus) {
+    for (const type in cpu.times) {
+      totalTick += cpu.times[type];
+    }
+    totalIdle += cpu.times.idle;
+  }
+
+  if (!prevCpuTimes) {
+    prevCpuTimes = { idle: totalIdle, tick: totalTick };
+    return 0;
+  }
+
+  const idleDiff = totalIdle - prevCpuTimes.idle;
+  const tickDiff = totalTick - prevCpuTimes.tick;
+  prevCpuTimes = { idle: totalIdle, tick: totalTick };
+
+  if (tickDiff === 0) return 0;
+  const used = tickDiff - idleDiff;
+  return Math.round((used / tickDiff) * 1000) / 10;
+}
 
 function getDiskInfo() {
   try {

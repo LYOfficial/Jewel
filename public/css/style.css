@@ -419,6 +419,86 @@ textarea { resize: vertical; min-height: 80px; }
 }
 .cal-empty { padding: 6px 0; }
 
+/* Terminal */
+.term-bar {
+  background: var(--bg-tertiary);
+  padding: 6px 10px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+}
+.term-output {
+  background: #050505;
+  padding: 10px;
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-height: 350px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.term-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  align-items: center;
+}
+.term-prompt { color: var(--text-muted); font-family: monospace; }
+.term-input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 13px;
+  outline: none;
+}
+
+/* File Manager */
+.fm-breadcrumb {
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+.fm-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+.fm-list {
+  max-height: 350px;
+  overflow-y: auto;
+}
+.fm-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.1s;
+}
+.fm-row:hover { background: var(--bg-hover); }
+.fm-size { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+.fm-path {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.action-cell { white-space: nowrap; }
+
 /* ====== Update Table ====== */
 .update-table { width: 100%; }
 .update-table td { padding: 6px 0; font-size: 13px; vertical-align: top; }
@@ -437,12 +517,13 @@ textarea { resize: vertical; min-height: 80px; }
 
 /* ====== Footer ====== */
 .app-footer {
-  padding: 12px 24px;
+  padding: 10px 24px;
   text-align: center;
   font-size: 12px;
   color: var(--text-muted);
   border-top: 1px solid var(--border-color);
   background: var(--bg-secondary);
+  flex-shrink: 0;
 }
 .app-footer a {
   color: var(--text-secondary);
@@ -491,6 +572,7 @@ textarea { resize: vertical; min-height: 80px; }
 .content-area {
   flex: 1;
   padding: 24px;
+  overflow-y: auto;
 }
 
 /* ====== Cards ====== */

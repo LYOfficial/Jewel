@@ -59,7 +59,7 @@ router.post('/', async (req, res) => {
   res.json(project);
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
@@ -83,6 +83,13 @@ router.put('/:id', (req, res) => {
     webhookSecret = crypto.randomBytes(32).toString('hex');
   }
 
+  // Detect if the source repo or branch changed — if so, re-clone so the
+  // working copy on disk matches what the user just entered.
+  const repoChanged =
+    git_url !== project.git_url ||
+    git_branch !== project.git_branch ||
+    git_token !== project.git_token;
+
   db.prepare(`
     UPDATE projects SET name=?, git_url=?, git_token=?, git_branch=?, compose_path=?,
     env_vars=?, auto_deploy=?, webhook_secret=?, container_name=?, reuse_volumes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
@@ -91,6 +98,17 @@ router.put('/:id', (req, res) => {
     JSON.stringify(env_vars || (() => { try { return JSON.parse(project.env_vars); } catch { return {}; } })()),
     autoDeployVal, webhookSecret, containerNameVal, reuseVolumesVal, req.params.id
   );
+
+  if (repoChanged) {
+    try {
+      db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('cloning', project.id);
+      await gitService.cloneRepo(git_url, project.id, git_branch || 'main', git_token || '');
+      db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('ready', project.id);
+    } catch (err) {
+      db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('error', project.id);
+      return res.status(500).json({ error: `Failed to re-clone repository: ${err.message}` });
+    }
+  }
 
   const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   res.json(updated);

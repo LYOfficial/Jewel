@@ -281,7 +281,32 @@ async function deployProject(project) {
     });
     return result.toString('utf-8');
   } catch (err) {
-    throw new Error(`Deploy failed: ${err.message}`);
+    // Auto-cleanup: tear down any partial state so the next deploy starts fresh.
+    // - down: removes containers
+    // - --remove-orphans: removes orphan containers from previous compose runs
+    // - --rmi local: removes images built by this compose (those without a custom tag)
+    // We intentionally do NOT pass -v so user data in named volumes survives.
+    try {
+      const cleanupCmd = `${composeCmd} -f "${composePath}" --project-name "${project.name}" down --remove-orphans --rmi local`;
+      execSync(cleanupCmd, { cwd: projectDir, timeout: 120000, stdio: 'pipe' });
+    } catch { /* best-effort cleanup */ }
+
+    // If a custom container_name was set, the orphan container may have been
+    // created with that name — make sure it's also removed.
+    if (project.container_name) {
+      try {
+        const existing = await findContainerByName(project.container_name);
+        if (existing) {
+          const c = await getContainer(existing.Id);
+          await c.remove({ force: true, v: false });
+        }
+      } catch { /* ignore */ }
+    }
+
+    const stderr = (err.stderr && err.stderr.toString()) || '';
+    const stdout = (err.stdout && err.stdout.toString()) || '';
+    const detail = (stderr + stdout).trim() || err.message;
+    throw new Error(`Deploy failed: ${detail}`);
   }
 }
 

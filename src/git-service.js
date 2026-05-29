@@ -126,10 +126,33 @@ function getRepoCommit(projectId) {
   }
 }
 
+async function fetchRepo(projectId) {
+  const projectDir = path.join(config.dataDir, 'projects', String(projectId));
+  if (!fs.existsSync(projectDir)) {
+    throw new Error('Project directory not found');
+  }
+  const git = simpleGit(projectDir);
+  await git.fetch('origin');
+  return projectDir;
+}
+
+async function getRemoteCommit(projectId, branch = 'main') {
+  const projectDir = path.join(config.dataDir, 'projects', String(projectId));
+  if (!fs.existsSync(projectDir)) return null;
+  try {
+    const git = simpleGit(projectDir);
+    return await git.revparse([`origin/${branch}`]);
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   cloneRepo,
   pullRepo,
   listGitHubRepos,
   listGitLabRepos,
-  getRepoCommit
+  getRepoCommit,
+  fetchRepo,
+  getRemoteCommit
 };

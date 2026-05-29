@@ -1,11 +1,11 @@
 const express = require('express');
-const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const db = require('./database');
 const { authMiddleware } = require('./auth');
 const gitService = require('./git-service');
 const dockerService = require('./docker-service');
+const projectUpdateService = require('./project-update-service');
 
 const router = express.Router();
 
@@ -23,17 +23,15 @@ router.get('/:id', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, git_url, git_token, git_branch, compose_path, env_vars, auto_deploy, container_name, reuse_volumes } = req.body;
+  const { name, git_url, git_token, git_branch, compose_path, env_vars, container_name, reuse_volumes } = req.body;
 
   if (!name || !git_url) {
     return res.status(400).json({ error: 'Name and git_url are required' });
   }
 
-  const webhookSecret = auto_deploy ? crypto.randomBytes(32).toString('hex') : '';
-
   const result = db.prepare(`
-    INSERT INTO projects (name, git_url, git_token, git_branch, compose_path, env_vars, auto_deploy, webhook_secret, container_name, reuse_volumes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO projects (name, git_url, git_token, git_branch, compose_path, env_vars, container_name, reuse_volumes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name,
     git_url,
@@ -41,8 +39,6 @@ router.post('/', async (req, res) => {
     git_branch || 'main',
     compose_path || 'docker-compose.yml',
     JSON.stringify(env_vars || {}),
-    auto_deploy ? 1 : 0,
-    webhookSecret,
     container_name || '',
     reuse_volumes ? 1 : 0
   );
@@ -51,6 +47,7 @@ router.post('/', async (req, res) => {
     db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('cloning', result.lastInsertRowid);
     await gitService.cloneRepo(git_url, result.lastInsertRowid, git_branch || 'main', git_token || '');
     db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('ready', result.lastInsertRowid);
+    await projectUpdateService.updateCommitHash(result.lastInsertRowid);
   } catch (err) {
     db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('error', result.lastInsertRowid);
   }
@@ -70,21 +67,13 @@ router.put('/:id', async (req, res) => {
     git_branch = project.git_branch,
     compose_path = project.compose_path,
     env_vars,
-    auto_deploy,
     container_name,
     reuse_volumes
   } = req.body;
 
-  const autoDeployVal = auto_deploy !== undefined ? (auto_deploy ? 1 : 0) : project.auto_deploy;
   const containerNameVal = container_name !== undefined ? container_name : project.container_name;
   const reuseVolumesVal = reuse_volumes !== undefined ? (reuse_volumes ? 1 : 0) : project.reuse_volumes;
-  let webhookSecret = project.webhook_secret;
-  if (autoDeployVal && !webhookSecret) {
-    webhookSecret = crypto.randomBytes(32).toString('hex');
-  }
 
-  // Detect if the source repo or branch changed — if so, re-clone so the
-  // working copy on disk matches what the user just entered.
   const repoChanged =
     git_url !== project.git_url ||
     git_branch !== project.git_branch ||
@@ -92,11 +81,11 @@ router.put('/:id', async (req, res) => {
 
   db.prepare(`
     UPDATE projects SET name=?, git_url=?, git_token=?, git_branch=?, compose_path=?,
-    env_vars=?, auto_deploy=?, webhook_secret=?, container_name=?, reuse_volumes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
+    env_vars=?, container_name=?, reuse_volumes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
   `).run(
     name, git_url, git_token, git_branch, compose_path,
     JSON.stringify(env_vars || (() => { try { return JSON.parse(project.env_vars); } catch { return {}; } })()),
-    autoDeployVal, webhookSecret, containerNameVal, reuseVolumesVal, req.params.id
+    containerNameVal, reuseVolumesVal, req.params.id
   );
 
   if (repoChanged) {
@@ -104,6 +93,7 @@ router.put('/:id', async (req, res) => {
       db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('cloning', project.id);
       await gitService.cloneRepo(git_url, project.id, git_branch || 'main', git_token || '');
       db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('ready', project.id);
+      await projectUpdateService.updateCommitHash(project.id);
     } catch (err) {
       db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('error', project.id);
       return res.status(500).json({ error: `Failed to re-clone repository: ${err.message}` });
@@ -169,6 +159,7 @@ router.post('/:id/deploy', async (req, res) => {
 
     const result = await dockerService.deployProject(project);
     db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('running', project.id);
+    await projectUpdateService.updateCommitHash(project.id);
     res.json({ message: 'Deployed successfully', output: result });
   } catch (err) {
     db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('error', project.id);
@@ -200,6 +191,27 @@ router.post('/:id/restart', async (req, res) => {
     res.json({ message: 'Restarted successfully', output: result });
   } catch (err) {
     db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('error', project.id);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/check-update', async (req, res) => {
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  try {
+    const localCommit = await gitService.getRepoCommit(project.id);
+    await gitService.fetchRepo(project.id);
+    const remoteCommit = await gitService.getRemoteCommit(project.id, project.git_branch);
+    const updateAvailable = remoteCommit && remoteCommit !== localCommit;
+
+    db.prepare(`
+      UPDATE projects SET commit_hash=?, remote_commit=?, update_available=?, last_update_check=CURRENT_TIMESTAMP WHERE id=?
+    `).run(localCommit || '', remoteCommit || '', updateAvailable ? 1 : 0, project.id);
+
+    const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+    res.json(updated);
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

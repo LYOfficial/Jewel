@@ -1,9 +1,9 @@
 const express = require('express');
 const path = require('path');
 const helmet = require('helmet');
-const db = require('./database');
 const config = require('./config');
 const updateService = require('./update-service');
+const projectUpdateService = require('./project-update-service');
 
 const routesAuth = require('./routes-auth');
 const routesProjects = require('./routes-projects');
@@ -33,39 +33,18 @@ app.use('/api/git', routesGit);
 app.use('/api/system', routesSystem);
 app.use('/api/tokens', routesTokens);
 
-app.post('/api/webhook/:id/:secret', (req, res) => {
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  if (project.webhook_secret !== req.params.secret) return res.status(403).json({ error: 'Invalid secret' });
-  if (!project.auto_deploy) return res.status(400).json({ error: 'Auto-deploy not enabled' });
-
-  const gitService = require('./git-service');
-  const dockerService = require('./docker-service');
-
-  res.json({ message: 'Webhook received, deploying...' });
-
-  (async () => {
-    try {
-      db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('deploying', project.id);
-      await gitService.pullRepo(project.id, project.git_branch);
-      await dockerService.deployProject(project);
-      db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('running', project.id);
-    } catch (err) {
-      console.error('Webhook deploy error:', err.message);
-      db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('error', project.id);
-    }
-  })();
-});
-
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
+// Periodic checks: Jewel self-update + project commit updates
 setInterval(() => {
   updateService.checkForUpdate().catch(() => {});
+  projectUpdateService.checkProjectUpdates().catch(() => {});
 }, 5 * 60 * 1000);
 
 updateService.checkForUpdate().catch(() => {});
+projectUpdateService.checkProjectUpdates().catch(() => {});
 
 // Clear stale updating flag on startup (means we successfully restarted after update)
 updateService.clearUpdatingFlag();

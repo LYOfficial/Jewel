@@ -656,6 +656,14 @@ tr:hover { background: var(--bg-hover); }
 .badge-idle { background: rgba(153,153,153,0.1); color: var(--text-muted); }
 .badge-ready { background: rgba(68,204,68,0.1); color: var(--success); }
 .badge-cloning { background: rgba(255,170,0,0.15); color: var(--warning); }
+.badge-update { background: rgba(255,170,0,0.15); color: var(--warning); margin-left: 6px; font-size: 11px; }
+
+/* ====== Commit & Update ====== */
+.commit-sha { font-family: 'Courier New', monospace; font-size: 12px; color: var(--text-secondary); }
+.commit-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.commit-info .text-muted { font-size: 12px; color: var(--text-muted); }
+.btn-update { background: rgba(255,170,0,0.15); color: var(--warning); border: 1px solid rgba(255,170,0,0.3); }
+.btn-update:hover { background: rgba(255,170,0,0.25); }
 
 /* ====== Status Dropdown ====== */
 .status-dropdown {

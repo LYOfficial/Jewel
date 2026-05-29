@@ -69,6 +69,10 @@ function addColumnIfMissing(table, column, definition) {
 }
 addColumnIfMissing('projects', 'container_name', "TEXT DEFAULT ''");
 addColumnIfMissing('projects', 'reuse_volumes', 'INTEGER DEFAULT 0');
+addColumnIfMissing('projects', 'commit_hash', "TEXT DEFAULT ''");
+addColumnIfMissing('projects', 'remote_commit', "TEXT DEFAULT ''");
+addColumnIfMissing('projects', 'update_available', 'INTEGER DEFAULT 0');
+addColumnIfMissing('projects', 'last_update_check', 'TEXT DEFAULT NULL');
 
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
 if (userCount.count === 0) {

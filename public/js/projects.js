@@ -31,7 +31,7 @@ const Projects = {
           <th data-i18n="project.name">名称</th>
           <th data-i18n="project.status">状态</th>
           <th data-i18n="project.branch">分支</th>
-          <th data-i18n="project.autoDeploy">自动部署</th>
+          <th data-i18n="project.commit">Commit</th>
           <th data-i18n="project.actions">操作</th>
         </tr></thead>
         <tbody>${projects.map(p => `
@@ -39,8 +39,12 @@ const Projects = {
             <td><a href="#" onclick="Projects.showDetail(${p.id});return false">${esc(p.name)}</a></td>
             <td><span class="badge badge-${p.status}">${esc(I18n.t(`status.${p.status}`) || p.status)}</span></td>
             <td>${esc(p.git_branch)}</td>
-            <td>${p.auto_deploy ? '&#10003;' : '&#10005;'}</td>
             <td>
+              ${p.commit_hash ? `<span class="commit-sha">${esc(p.commit_hash.substring(0,7))}</span>` : '<span class="text-muted">-</span>'}
+              ${p.update_available ? `<span class="badge badge-update" data-i18n="project.updateAvailable">有更新</span>` : ''}
+            </td>
+            <td>
+              ${p.update_available ? `<button class="btn btn-sm btn-update" onclick="Projects.updateProject(${p.id})" data-i18n="project.update">更新</button>` : ''}
               <button class="btn btn-sm" onclick="Projects.deploy(${p.id})" data-i18n="project.deploy">部署</button>
               <button class="btn btn-sm" onclick="Projects.stop(${p.id})" data-i18n="project.stop">停止</button>
               <button class="btn btn-sm" onclick="Projects.showDetail(${p.id})" data-i18n="project.detail">详情</button>
@@ -102,9 +106,6 @@ const Projects = {
         </div>
       </div>
       <div class="form-group">
-        <label><input type="checkbox" id="projAutoDeploy"> <span data-i18n="project.autoDeploy">自动部署</span></label>
-      </div>
-      <div class="form-group">
         <label class="experimental-label">
           <input type="checkbox" id="projReuseVolumes">
           <span data-i18n="project.reuseVolumes">复用本地挂载卷</span>
@@ -154,7 +155,6 @@ const Projects = {
       git_token: gitToken,
       git_branch: document.getElementById('projBranch').value || 'main',
       compose_path: document.getElementById('projCompose').value || 'docker-compose.yml',
-      auto_deploy: document.getElementById('projAutoDeploy').checked,
       reuse_volumes: document.getElementById('projReuseVolumes').checked
     };
 
@@ -236,6 +236,33 @@ const Projects = {
     }
   },
 
+  async updateProject(id) {
+    try {
+      Notify.info(I18n.t('project.updating') || 'Updating project...');
+      await API.deployProject(id);
+      Notify.success(I18n.t('project.updateSuccess') || 'Project updated');
+      this.loadList();
+    } catch (err) {
+      Notify.error(err.message);
+    }
+  },
+
+  async checkUpdate(id) {
+    try {
+      Notify.info(I18n.t('project.checkUpdate') || 'Checking for updates...');
+      const updated = await API.checkProjectUpdate(id);
+      if (updated.update_available) {
+        Notify.info(I18n.t('project.updateAvailable') || 'Update available');
+      } else {
+        Notify.success(I18n.t('project.upToDate') || 'Up to date');
+      }
+      this.loadList();
+      return updated;
+    } catch (err) {
+      Notify.error(err.message);
+    }
+  },
+
   async stop(id) {
     try {
       await API.stopProject(id);
@@ -276,6 +303,9 @@ const Projects = {
         }
       } catch { /* ignore */ }
 
+      const commitShort = project.commit_hash ? project.commit_hash.substring(0, 7) : '-';
+      const remoteShort = project.remote_commit ? project.remote_commit.substring(0, 7) : '';
+
       const content = `
         <div class="form-group">
           <label data-i18n="project.name">名称</label>
@@ -312,7 +342,15 @@ const Projects = {
           </div>
         </div>
         <div class="form-group">
-          <label><input type="checkbox" id="detailAutoDeploy" ${project.auto_deploy ? 'checked' : ''}> <span data-i18n="project.autoDeploy">自动部署</span></label>
+          <label data-i18n="project.commit">Commit</label>
+          <div class="commit-info">
+            <span class="commit-sha">${esc(commitShort)}</span>
+            ${project.update_available ? `
+              <span class="badge badge-update" data-i18n="project.updateAvailable">有更新</span>
+              <span class="text-muted">→ ${esc(remoteShort)}</span>
+            ` : ''}
+            <button class="btn btn-sm" onclick="Projects.checkUpdate(${project.id})" data-i18n="project.checkUpdate">检查更新</button>
+          </div>
         </div>
         <div class="form-group">
           <label class="experimental-label">
@@ -324,11 +362,6 @@ const Projects = {
             勾选后，若主机上已有同名容器，将先删除该容器（仅删容器，保留挂载卷），然后用新配置创建容器并复用原数据。
           </small>
         </div>
-        ${project.webhook_secret ? `
-        <div class="form-group">
-          <label data-i18n="project.webhookUrl">Webhook URL</label>
-          <input type="text" readonly value="${window.location.origin}/api/webhook/${project.id}/${project.webhook_secret}" onclick="this.select()">
-        </div>` : ''}
         <div class="form-group">
           <label data-i18n="project.envVars">环境变量</label>
           <textarea id="envEditor" rows="8" placeholder="KEY=VALUE&#10;PORT=3000&#10;DB_HOST=localhost">${esc(envText)}</textarea>
@@ -397,7 +430,6 @@ const Projects = {
       git_token: gitToken,
       git_branch: document.getElementById('detailBranch').value,
       compose_path: document.getElementById('detailCompose').value,
-      auto_deploy: document.getElementById('detailAutoDeploy').checked,
       reuse_volumes: document.getElementById('detailReuseVolumes').checked
     };
 

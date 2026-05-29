@@ -88,9 +88,29 @@ async function unpauseContainer(id) {
   return container.unpause();
 }
 
-async function removeContainer(id, force = false) {
+async function removeContainer(id, force = false, removeVolumes = false) {
   const container = await getContainer(id);
-  return container.remove({ force });
+  return container.remove({ force, v: removeVolumes });
+}
+
+async function removeContainerAdvanced(id, options = {}) {
+  const { force = true, removeVolumes = false, removeImage = false } = options;
+  const container = await getContainer(id);
+  let imageId = null;
+
+  if (removeImage) {
+    const info = await container.inspect();
+    imageId = info.Image;
+  }
+
+  await container.remove({ force, v: removeVolumes });
+
+  if (removeImage && imageId) {
+    try {
+      const image = docker.getImage(imageId);
+      await image.remove({ force: true });
+    } catch { /* image may be in use by other containers */ }
+  }
 }
 
 async function getContainerLogs(id, tail = 100) {
@@ -264,6 +284,7 @@ module.exports = {
   pauseContainer,
   unpauseContainer,
   removeContainer,
+  removeContainerAdvanced,
   getContainerLogs,
   getContainerStats,
   deployProject,

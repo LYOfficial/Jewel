@@ -142,8 +142,58 @@ const Containers = {
     try { await API.unpauseContainer(id); Notify.success(I18n.t('container.resumed') || 'Container resumed'); this.loadList(); } catch (err) { Notify.error(err.message); }
   },
   async remove(id) {
-    if (!confirm(I18n.t('container.confirmRemove') || 'Are you sure?')) return;
-    try { await API.removeContainer(id, true); Notify.success(I18n.t('container.removed') || 'Container removed'); this.loadList(); } catch (err) { Notify.error(err.message); }
+    let info = null;
+    try {
+      info = await API.getContainer(id);
+    } catch (err) {
+      Notify.error(err.message);
+      return;
+    }
+
+    const name = (info.Name || '').replace(/^\//, '') || id.substring(0, 12);
+    const image = info.Config?.Image || '-';
+    const volumeMounts = (info.Mounts || []).filter(m => m.Type === 'volume');
+    const volumeNames = volumeMounts.map(m => m.Name).filter(Boolean);
+
+    const content = `
+      <div class="rm-info">
+        <div class="rm-row"><span class="rm-label" data-i18n="container.name">名称</span><span class="rm-value">${esc(name)}</span></div>
+        <div class="rm-row"><span class="rm-label" data-i18n="container.image">镜像</span><span class="rm-value"><small>${esc(image)}</small></span></div>
+        ${volumeNames.length ? `<div class="rm-row"><span class="rm-label" data-i18n="container.volumes">卷</span><span class="rm-value"><small>${volumeNames.map(esc).join(', ')}</small></span></div>` : ''}
+      </div>
+      <div class="rm-options">
+        ${volumeNames.length ? `
+        <label class="rm-check">
+          <input type="checkbox" id="rmVolumes">
+          <span data-i18n="container.removeVolumes">同时删除挂载卷（数据将永久丢失）</span>
+        </label>` : ''}
+        <label class="rm-check">
+          <input type="checkbox" id="rmImage">
+          <span data-i18n="container.removeImage">同时删除镜像（其他容器仍在使用时跳过）</span>
+        </label>
+      </div>
+      <p class="rm-warn" data-i18n="container.removeWarn">此操作不可撤销。</p>
+    `;
+
+    Modal.show(I18n.t('container.confirmRemoveTitle') || '删除容器', content, [
+      { label: I18n.t('common.cancel') || '取消', class: 'btn-secondary' },
+      {
+        label: I18n.t('common.confirm') || '确定',
+        class: 'btn-danger',
+        onClick: async () => {
+          const removeVolumes = document.getElementById('rmVolumes')?.checked || false;
+          const removeImage = document.getElementById('rmImage')?.checked || false;
+          try {
+            await API.removeContainer(id, { force: true, removeVolumes, removeImage });
+            Notify.success(I18n.t('container.removed') || 'Container removed');
+            this.loadList();
+          } catch (err) {
+            Notify.error(err.message);
+          }
+        }
+      }
+    ]);
+    I18n.apply();
   },
 
   toggleMenu(id) {

@@ -717,6 +717,51 @@ tr:hover { background: var(--bg-hover); }
 .restart-icon { color: #6af; }
 .pause-icon { color: #fa0; }
 
+/* ====== Remove Container Dialog ====== */
+.rm-info {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.rm-row {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.rm-label {
+  color: #888;
+  min-width: 56px;
+  flex-shrink: 0;
+}
+.rm-value {
+  color: #ccc;
+  word-break: break-all;
+}
+.rm-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.rm-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #ccc;
+  cursor: pointer;
+  user-select: none;
+}
+.rm-check input { cursor: pointer; }
+.rm-warn {
+  color: #e55;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
 /* ====== Modal ====== */
 .modal {
   position: fixed;

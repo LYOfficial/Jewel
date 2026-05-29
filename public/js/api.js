@@ -70,7 +70,13 @@ const API = {
   restartContainer(id) { return this.post(`/containers/${id}/restart`); },
   pauseContainer(id) { return this.post(`/containers/${id}/pause`); },
   unpauseContainer(id) { return this.post(`/containers/${id}/unpause`); },
-  removeContainer(id, force = false) { return this.del(`/containers/${id}?force=${force}`); },
+  removeContainer(id, options = {}) {
+    const params = new URLSearchParams();
+    if (options.force !== undefined) params.set('force', options.force);
+    if (options.removeVolumes) params.set('removeVolumes', 'true');
+    if (options.removeImage) params.set('removeImage', 'true');
+    return this.del(`/containers/${id}?${params.toString()}`);
+  },
   getContainerLogs(id, tail = 100) { return this.get(`/containers/${id}/logs?tail=${tail}`); },
   getContainerStats(id) { return this.get(`/containers/${id}/stats`); },
   getContainerMounts(id) { return this.get(`/containers/${id}/mounts`); },

@@ -88,7 +88,11 @@ router.post('/:id/unpause', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    await dockerService.removeContainer(req.params.id, req.query.force === 'true');
+    await dockerService.removeContainerAdvanced(req.params.id, {
+      force: req.query.force !== 'false',
+      removeVolumes: req.query.removeVolumes === 'true',
+      removeImage: req.query.removeImage === 'true'
+    });
     res.json({ message: 'Container removed' });
   } catch (err) {
     res.status(500).json({ error: err.message });

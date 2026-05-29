@@ -55,6 +55,8 @@
   "project.addEnv": "新增變數",
   "project.logs": "日誌",
   "project.noLogs": "暫無日誌",
+  "project.deployLog": "部署日誌",
+  "project.noDeployLog": "暫無部署日誌。點擊部署後可在此查看完整終端輸出。",
   "project.noProjects": "暫無專案，點擊上方按鈕新增",
   "project.deploy": "部署",
   "project.stop": "停止",

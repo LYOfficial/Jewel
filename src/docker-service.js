@@ -206,6 +206,39 @@ async function findContainerByName(name) {
   }
 }
 
+function getDeployLogPath(projectId) {
+  return path.join(
+    process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
+    'projects',
+    String(projectId),
+    '.jewel-deploy.log'
+  );
+}
+
+function readDeployLog(projectId) {
+  const logPath = getDeployLogPath(projectId);
+  try {
+    if (fs.existsSync(logPath)) return fs.readFileSync(logPath, 'utf-8');
+  } catch { /* ignore */ }
+  return '';
+}
+
+function appendDeployLog(projectId, text) {
+  const logPath = getDeployLogPath(projectId);
+  try {
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.appendFileSync(logPath, text, 'utf-8');
+  } catch { /* ignore */ }
+}
+
+function resetDeployLog(projectId, header) {
+  const logPath = getDeployLogPath(projectId);
+  try {
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.writeFileSync(logPath, header, 'utf-8');
+  } catch { /* ignore */ }
+}
+
 async function deployProject(project) {
   const projectDir = path.join(
     process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
@@ -213,9 +246,14 @@ async function deployProject(project) {
     String(project.id)
   );
 
+  const startTime = new Date().toISOString();
+  resetDeployLog(project.id, `=== Deploy started at ${startTime} ===\n[project] ${project.name} (id=${project.id})\n[cwd] ${projectDir}\n\n`);
+
   const composePath = path.join(projectDir, project.compose_path);
   if (!fs.existsSync(composePath)) {
-    throw new Error(`docker-compose file not found: ${composePath}`);
+    const msg = `docker-compose file not found: ${composePath}`;
+    appendDeployLog(project.id, `[error] ${msg}\n`);
+    throw new Error(msg);
   }
 
   // Ensure all env_file references exist before compose up
@@ -242,17 +280,20 @@ async function deployProject(project) {
 
     if (existing) {
       if (!project.reuse_volumes) {
-        throw new Error(
-          `A container named "${customName}" already exists. ` +
-          `Enable "Reuse existing volumes" in the project settings to replace it (volumes will be kept).`
-        );
+        const msg = `A container named "${customName}" already exists. ` +
+          `Enable "Reuse existing volumes" in the project settings to replace it (volumes will be kept).`;
+        appendDeployLog(project.id, `[error] ${msg}\n`);
+        throw new Error(msg);
       }
       // Remove the existing container but keep its volumes (v: false)
       try {
+        appendDeployLog(project.id, `[info] Removing existing container "${customName}" (keeping volumes)\n`);
         const c = await getContainer(existing.Id);
         await c.remove({ force: true, v: false });
       } catch (err) {
-        throw new Error(`Failed to remove existing container "${customName}": ${err.message}`);
+        const msg = `Failed to remove existing container "${customName}": ${err.message}`;
+        appendDeployLog(project.id, `[error] ${msg}\n`);
+        throw new Error(msg);
       }
     }
 
@@ -264,32 +305,54 @@ async function deployProject(project) {
       if (firstServiceKey) {
         services[firstServiceKey].container_name = customName;
         fs.writeFileSync(composePath, yaml.dump(composeDoc), 'utf-8');
+        appendDeployLog(project.id, `[info] Injected container_name="${customName}" into service "${firstServiceKey}"\n`);
       }
     } catch (err) {
-      throw new Error(`Failed to update compose file with container_name: ${err.message}`);
+      const msg = `Failed to update compose file with container_name: ${err.message}`;
+      appendDeployLog(project.id, `[error] ${msg}\n`);
+      throw new Error(msg);
     }
   }
 
   const composeCmd = process.env.COMPOSE_CMD || 'docker compose';
   const cmd = `${composeCmd} -f "${composePath}" --project-name "${project.name}" up -d --build`;
 
+  appendDeployLog(project.id, `\n$ ${cmd}\n`);
+
   try {
     const result = execSync(cmd, {
       cwd: projectDir,
       timeout: 600000,
-      env: { ...process.env }
+      env: { ...process.env },
+      stdio: 'pipe'
     });
-    return result.toString('utf-8');
+    const stdout = result.toString('utf-8');
+    appendDeployLog(project.id, stdout);
+    appendDeployLog(project.id, `\n=== Deploy succeeded at ${new Date().toISOString()} ===\n`);
+    return stdout;
   } catch (err) {
+    const stderr = (err.stderr && err.stderr.toString()) || '';
+    const stdout = (err.stdout && err.stdout.toString()) || '';
+    if (stdout) appendDeployLog(project.id, stdout);
+    if (stderr) appendDeployLog(project.id, stderr);
+    appendDeployLog(project.id, `\n[error] Command exited with code ${err.status}\n`);
+
     // Auto-cleanup: tear down any partial state so the next deploy starts fresh.
     // - down: removes containers
     // - --remove-orphans: removes orphan containers from previous compose runs
     // - --rmi local: removes images built by this compose (those without a custom tag)
     // We intentionally do NOT pass -v so user data in named volumes survives.
+    const cleanupCmd = `${composeCmd} -f "${composePath}" --project-name "${project.name}" down --remove-orphans --rmi local`;
+    appendDeployLog(project.id, `\n[cleanup] Tearing down partial deploy state\n$ ${cleanupCmd}\n`);
     try {
-      const cleanupCmd = `${composeCmd} -f "${composePath}" --project-name "${project.name}" down --remove-orphans --rmi local`;
-      execSync(cleanupCmd, { cwd: projectDir, timeout: 120000, stdio: 'pipe' });
-    } catch { /* best-effort cleanup */ }
+      const cleanupOut = execSync(cleanupCmd, { cwd: projectDir, timeout: 120000, stdio: 'pipe' });
+      appendDeployLog(project.id, cleanupOut.toString('utf-8'));
+    } catch (cleanupErr) {
+      const cstderr = (cleanupErr.stderr && cleanupErr.stderr.toString()) || '';
+      const cstdout = (cleanupErr.stdout && cleanupErr.stdout.toString()) || '';
+      if (cstdout) appendDeployLog(project.id, cstdout);
+      if (cstderr) appendDeployLog(project.id, cstderr);
+    }
 
     // If a custom container_name was set, the orphan container may have been
     // created with that name — make sure it's also removed.
@@ -297,14 +360,15 @@ async function deployProject(project) {
       try {
         const existing = await findContainerByName(project.container_name);
         if (existing) {
+          appendDeployLog(project.id, `[cleanup] Removing leftover container "${project.container_name}"\n`);
           const c = await getContainer(existing.Id);
           await c.remove({ force: true, v: false });
         }
       } catch { /* ignore */ }
     }
 
-    const stderr = (err.stderr && err.stderr.toString()) || '';
-    const stdout = (err.stdout && err.stdout.toString()) || '';
+    appendDeployLog(project.id, `\n=== Deploy failed at ${new Date().toISOString()} ===\n`);
+
     const detail = (stderr + stdout).trim() || err.message;
     throw new Error(`Deploy failed: ${detail}`);
   }
@@ -367,5 +431,6 @@ module.exports = {
   getProjectContainers,
   getDockerInfo,
   ensureEnvFiles,
-  findContainerByName
+  findContainerByName,
+  readDeployLog
 };

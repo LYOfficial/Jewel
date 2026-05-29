@@ -236,4 +236,12 @@ router.get('/:id/logs', async (req, res) => {
   }
 });
 
+router.get('/:id/deploy-log', (req, res) => {
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const log = dockerService.readDeployLog(project.id);
+  res.json({ log });
+});
+
 module.exports = router;

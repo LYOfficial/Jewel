@@ -60,6 +60,7 @@ const API = {
   restartProject(id) { return this.post(`/projects/${id}/restart`); },
   getProjectContainers(id) { return this.get(`/projects/${id}/containers`); },
   getProjectLogs(id) { return this.get(`/projects/${id}/logs`); },
+  getProjectDeployLog(id) { return this.get(`/projects/${id}/deploy-log`); },
 
   // Containers
   getContainers(all = false) { return this.get(`/containers?all=${all}`); },

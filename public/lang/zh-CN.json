@@ -55,6 +55,8 @@
   "project.addEnv": "添加变量",
   "project.logs": "日志",
   "project.noLogs": "暂无日志",
+  "project.deployLog": "部署日志",
+  "project.noDeployLog": "暂无部署日志。点击部署后可在此查看完整终端输出。",
   "project.noProjects": "暂无项目，点击上方按钮添加",
   "project.deploy": "部署",
   "project.stop": "停止",

@@ -55,6 +55,8 @@
   "project.addEnv": "Add Variable",
   "project.logs": "Logs",
   "project.noLogs": "No logs available",
+  "project.deployLog": "Deploy Log",
+  "project.noDeployLog": "No deploy log yet. Click deploy to see full terminal output.",
   "project.noProjects": "No projects yet. Click the button above to add one.",
   "project.deploy": "Deploy",
   "project.stop": "Stop",

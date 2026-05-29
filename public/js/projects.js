@@ -222,6 +222,17 @@ const Projects = {
       this.loadList();
     } catch (err) {
       Notify.error(err.message);
+    } finally {
+      // Refresh deploy log if the detail modal is currently open for this project
+      try {
+        const deployEl = document.getElementById('projectDeployLog');
+        if (deployEl) {
+          const resp = await API.getProjectDeployLog(id);
+          const text = (resp && resp.log) || '';
+          deployEl.textContent = text.trim() ? text : (I18n.t('project.noDeployLog') || 'No deploy log yet.');
+          deployEl.scrollTop = deployEl.scrollHeight;
+        }
+      } catch { /* ignore */ }
     }
   },
 
@@ -323,6 +334,10 @@ const Projects = {
           <textarea id="envEditor" rows="8" placeholder="KEY=VALUE&#10;PORT=3000&#10;DB_HOST=localhost">${esc(envText)}</textarea>
         </div>
         <div class="form-group">
+          <label data-i18n="project.deployLog">部署日志</label>
+          <div class="log-viewer" id="projectDeployLog">${I18n.t('common.loading') || 'Loading...'}</div>
+        </div>
+        <div class="form-group">
           <label data-i18n="project.logs">日志</label>
           <div class="log-viewer" id="projectLogs">${I18n.t('common.loading') || 'Loading...'}</div>
         </div>
@@ -338,6 +353,16 @@ const Projects = {
         document.getElementById('detailManualTokenGroup').style.display =
           e.target.value === '__manual__' ? 'block' : 'none';
       });
+
+      try {
+        const deployLogResp = await API.getProjectDeployLog(id);
+        const deployEl = document.getElementById('projectDeployLog');
+        if (deployEl) {
+          const text = (deployLogResp && deployLogResp.log) || '';
+          deployEl.textContent = text.trim() ? text : (I18n.t('project.noDeployLog') || 'No deploy log yet. Click deploy to see full terminal output.');
+          deployEl.scrollTop = deployEl.scrollHeight;
+        }
+      } catch { /* ignore */ }
 
       try {
         const logs = await API.getProjectLogs(id);

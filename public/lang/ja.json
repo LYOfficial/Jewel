@@ -55,6 +55,8 @@
   "project.addEnv": "変数追加",
   "project.logs": "ログ",
   "project.noLogs": "ログがありません",
+  "project.deployLog": "デプロイログ",
+  "project.noDeployLog": "デプロイログはまだありません。デプロイをクリックすると完全なターミナル出力が表示されます。",
   "project.noProjects": "プロジェクトがありません。上のボタンをクリックして追加してください。",
   "project.deploy": "デプロイ",
   "project.stop": "停止",

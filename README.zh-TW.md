@@ -6,6 +6,25 @@
 
 ---
 
+## 截圖
+
+<table>
+  <tr>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/1.png?raw=true" alt="screenshot 1"></td>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/2.png?raw=true" alt="screenshot 2"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/3.png?raw=true" alt="screenshot 3"></td>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/4.png?raw=true" alt="screenshot 4"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/5.png?raw=true" alt="screenshot 5"></td>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/6.png?raw=true" alt="screenshot 6"></td>
+  </tr>
+</table>
+
+---
+
 ## 簡介
 
 Jewel 是一個輕量級的 Git 到 Docker 整合部署平台，靈感來源於 Dokploy 和 Portainer。它可以幫助你快速將 Git 倉庫中的專案透過 Docker Compose 進行構建和部署。

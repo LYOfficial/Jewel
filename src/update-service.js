@@ -177,27 +177,36 @@ function detectLatestVersion(message) {
 async function applyUpdate() {
   if (updating) throw new Error('Update already in progress');
 
-  const appDir = path.join(__dirname, '..');
-
-  execSync('git fetch origin main', { cwd: appDir, timeout: 60000 });
-  execSync('git reset --hard origin/main', { cwd: appDir, timeout: 30000 });
-
-  try {
-    execSync('npm ci --omit=dev', { cwd: appDir, timeout: 120000 });
-  } catch {
-    try { execSync('npm install --omit=dev', { cwd: appDir, timeout: 120000 }); } catch { /* non-critical */ }
-  }
-
   updating = true;
   try { fs.writeFileSync(UPDATING_FILE, Date.now().toString(), 'utf-8'); } catch { /* ignore */ }
 
-  // Build the new image. This works regardless of how the container was
-  // originally deployed (docker run or docker compose) — we build from the
-  // cloned source inside the container, and the resulting `jewel:latest`
-  // image will be used by scheduleRestart() to recreate the container.
+  // Maintain a git clone in the data volume (/data/jewel-source).
+  // This works regardless of how the container was deployed — whether via
+  // install.sh (no .git inside container) or docker compose (has .git).
+  // The data volume persists across container restarts, so we only clone once
+  // and pull on subsequent updates.
+  const sourceDir = path.join(config.dataDir, 'jewel-source');
+  const repoUrl = 'https://github.com/LYOfficial/Jewel.git';
+
+  try {
+    if (fs.existsSync(path.join(sourceDir, '.git'))) {
+      execSync('git fetch origin main', { cwd: sourceDir, timeout: 60000 });
+      execSync('git reset --hard origin/main', { cwd: sourceDir, timeout: 30000 });
+    } else {
+      // Clean up any leftover directory, then fresh clone
+      try { fs.rmSync(sourceDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      execSync(`git clone --depth 1 --branch main ${repoUrl} ${sourceDir}`, { timeout: 120000 });
+    }
+  } catch (err) {
+    updating = false;
+    try { fs.unlinkSync(UPDATING_FILE); } catch { /* ignore */ }
+    throw new Error('Git pull/clone failed: ' + err.message);
+  }
+
+  // Build the new image from the cloned source
   try {
     execSync('docker build --no-cache -t jewel:latest .', {
-      cwd: appDir, timeout: 600000, stdio: 'pipe'
+      cwd: sourceDir, timeout: 600000, stdio: 'pipe'
     });
   } catch (err) {
     updating = false;

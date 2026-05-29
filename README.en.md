@@ -6,25 +6,6 @@
 
 ---
 
-## Screenshots
-
-<table>
-  <tr>
-    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/1.png?raw=true" alt="screenshot 1"></td>
-    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/2.png?raw=true" alt="screenshot 2"></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/3.png?raw=true" alt="screenshot 3"></td>
-    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/4.png?raw=true" alt="screenshot 4"></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/5.png?raw=true" alt="screenshot 5"></td>
-    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/6.png?raw=true" alt="screenshot 6"></td>
-  </tr>
-</table>
-
----
-
 ## Overview
 
 Jewel is a lightweight Git-to-Docker deployment platform inspired by Dokploy and Portainer. It helps you quickly build and deploy projects from Git repositories using Docker Compose.
@@ -45,6 +26,25 @@ Jewel is a lightweight Git-to-Docker deployment platform inspired by Dokploy and
 - Zero frontend build dependencies — vanilla HTML/CSS/JS
 - Single-process architecture with embedded SQLite
 - Minimal resource usage
+
+---
+
+## UI Preview
+
+<table>
+  <tr>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/1.png?raw=true" alt="screenshot 1"></td>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/2.png?raw=true" alt="screenshot 2"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/3.png?raw=true" alt="screenshot 3"></td>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/4.png?raw=true" alt="screenshot 4"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/5.png?raw=true" alt="screenshot 5"></td>
+    <td width="50%"><img src="https://github.com/LYOfficial/Jewel/blob/main/img/6.png?raw=true" alt="screenshot 6"></td>
+  </tr>
+</table>
 
 ---
 

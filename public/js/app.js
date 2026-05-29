@@ -68,17 +68,10 @@ const App = {
     });
 
     document.getElementById('updateBanner').addEventListener('click', async () => {
-      if (!confirm(I18n.t('update.confirmApply') || 'Confirm update? The service will restart.')) return;
+      if (!confirm(I18n.t('update.confirmApply') || 'Update will run install.sh in the background and restart the container. Confirm?')) return;
       try {
-        Notify.info(I18n.t('update.applying') || 'Updating...');
-        const res = await API.applyUpdate();
-        if (res.needsRestart) {
-          window.location.href = '/upgrading.html?phase=built';
-        } else if (res.restarting) {
-          window.location.href = '/upgrading.html?phase=restart';
-        } else {
-          Notify.success(I18n.t('update.applied') || 'Update applied');
-        }
+        await API.applyUpdate();
+        Notify.success(I18n.t('update.applying') || 'Update started. The container will restart in 1-3 minutes. Refresh the page after that.');
       } catch (err) { Notify.error(err.message); }
     });
   },

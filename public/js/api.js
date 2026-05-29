@@ -100,7 +100,6 @@ const API = {
   checkUpdate() { return this.get('/system/update/check'); },
   forceCheckUpdate() { return this.post('/system/update/check'); },
   applyUpdate() { return this.post('/system/update/apply'); },
-  restartAfterUpdate() { return this.post('/system/update/restart'); },
   getSettings() { return this.get('/system/settings'); },
   updateSettings(data) { return this.put('/system/settings', data); },
   getNotes() { return this.get('/system/notes'); },

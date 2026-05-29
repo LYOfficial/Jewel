@@ -180,131 +180,101 @@ async function applyUpdate() {
   updating = true;
   try { fs.writeFileSync(UPDATING_FILE, Date.now().toString(), 'utf-8'); } catch { /* ignore */ }
 
-  // Maintain a git clone in the data volume (/data/jewel-source).
-  // This works regardless of how the container was deployed — whether via
-  // install.sh (no .git inside container) or docker compose (has .git).
-  // The data volume persists across container restarts, so we only clone once
-  // and pull on subsequent updates.
-  const sourceDir = path.join(config.dataDir, 'jewel-source');
-  const repoUrl = 'https://github.com/LYOfficial/Jewel.git';
-
-  try {
-    if (fs.existsSync(path.join(sourceDir, '.git'))) {
-      execSync('git fetch origin main', { cwd: sourceDir, timeout: 60000 });
-      execSync('git reset --hard origin/main', { cwd: sourceDir, timeout: 30000 });
-    } else {
-      // Clean up any leftover directory, then fresh clone
-      try { fs.rmSync(sourceDir, { recursive: true, force: true }); } catch { /* ignore */ }
-      execSync(`git clone --depth 1 --branch main ${repoUrl} ${sourceDir}`, { timeout: 120000 });
-    }
-  } catch (err) {
-    updating = false;
-    try { fs.unlinkSync(UPDATING_FILE); } catch { /* ignore */ }
-    throw new Error('Git pull/clone failed: ' + err.message);
-  }
-
-  // Build the new image from the cloned source
-  try {
-    execSync('docker build --no-cache -t jewel:latest .', {
-      cwd: sourceDir, timeout: 600000, stdio: 'pipe'
-    });
-  } catch (err) {
-    updating = false;
-    try { fs.unlinkSync(UPDATING_FILE); } catch { /* ignore */ }
-    throw new Error('Docker image build failed: ' + err.message);
-  }
-
-  return { success: true, needsRestart: true };
-}
-
-async function scheduleRestart() {
-  if (!updating) throw new Error('No update in progress');
+  // Strategy: spawn a helper container that runs install.sh on the host.
+  // install.sh will stop & remove the current container, build a new image,
+  // and start a new container — so we don't need a separate restart step.
+  //
+  // We detect the current container's host port and pass it to install.sh
+  // so the new container uses the same port.
 
   const docker = dockerService.getDocker();
   const hostname = process.env.HOSTNAME;
-  if (!hostname) throw new Error('Cannot detect container hostname (HOSTNAME env not set)');
-
-  const currentContainer = docker.getContainer(hostname);
-  const info = await currentContainer.inspect();
-
-  // Extract the current container's config so the helper can recreate it
-  // with the exact same settings but the new image.
-  const hc = info.HostConfig || {};
-  const containerName = (info.Name || '').replace(/^\//, '') || 'jewel';
-  const portBindings = hc.PortBindings || {};
-  const binds = hc.Binds || [];
-  const restartPolicy = (hc.RestartPolicy && hc.RestartPolicy.Name) || 'unless-stopped';
-  const envVars = info.Config?.Env || [];
-
-  // Build a `docker run` command that recreates this container
-  const parts = ['docker', 'run', '-d'];
-  parts.push('--name', shellQ(containerName));
-  parts.push('--restart', shellQ(restartPolicy));
-
-  for (const [containerPort, mappings] of Object.entries(portBindings)) {
-    for (const m of (mappings || [])) {
-      const host = m.HostIp ? `${m.HostIp}:` : '';
-      const cp = containerPort.split('/')[0]; // strip /tcp /udp
-      parts.push('-p', shellQ(`${host}${m.HostPort}:${cp}`));
-    }
+  if (!hostname) {
+    updating = false;
+    try { fs.unlinkSync(UPDATING_FILE); } catch { /* ignore */ }
+    throw new Error('Cannot detect container hostname (HOSTNAME env not set)');
   }
 
-  for (const b of binds) {
-    parts.push('-v', shellQ(b));
-  }
+  let hostPort = '330';
+  try {
+    const info = await docker.getContainer(hostname).inspect();
+    const portBindings = info.HostConfig?.PortBindings || {};
+    const binding = portBindings['330/tcp'];
+    if (binding && binding[0]?.HostPort) hostPort = binding[0].HostPort;
+  } catch { /* fall back to default */ }
 
-  for (const e of envVars) {
-    parts.push('-e', shellQ(e));
-  }
+  // Helper container needs: docker socket (to manage containers) and git/docker CLI.
+  // The official `docker:cli` image has docker, but not git or curl. We use
+  // `docker:24-cli` which is small and we'll install git + curl on the fly.
+  // Actually simpler: use alpine and install everything we need.
+  const helperScript = `#!/bin/sh
+set -e
+apk add --no-cache curl docker-cli git >/dev/null 2>&1 || true
+sleep 2
+curl -sSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh | sh -s ${hostPort}
+`;
 
-  parts.push('jewel:latest');
+  fs.writeFileSync(path.join(config.dataDir, 'jewel-update.sh'), helperScript, 'utf-8');
 
-  const runCmd = parts.join(' ');
-
-  // Write a self-contained helper script to the data volume
-  const helperScript = [
-    '#!/bin/sh',
-    'sleep 3',
-    `docker rm -f ${shellQ(containerName)}`,
-    runCmd,
-    'rm -f /data/jewel-restart.sh'
-  ].join('\n');
-
-  fs.writeFileSync(path.join(config.dataDir, 'jewel-restart.sh'), helperScript, 'utf-8');
-
-  // Find the data volume mount so the helper can access the script
-  const dataMount = (info.Mounts || []).find(m => m.Destination === '/data');
-  const dataVolumeName = dataMount ? (dataMount.Name || dataMount.Source) : null;
+  // Find the data volume so the helper can read the script
+  let dataVolumeName = null;
+  try {
+    const info = await docker.getContainer(hostname).inspect();
+    const dataMount = (info.Mounts || []).find(m => m.Destination === '/data');
+    if (dataMount) dataVolumeName = dataMount.Name || dataMount.Source;
+  } catch { /* ignore */ }
 
   const helperBinds = ['/var/run/docker.sock:/var/run/docker.sock'];
   if (dataVolumeName) helperBinds.push(`${dataVolumeName}:/data`);
 
-  // Launch the helper container using the freshly built jewel:latest image
-  const helper = await docker.createContainer({
-    Image: 'jewel:latest',
-    Cmd: ['sh', '/data/jewel-restart.sh'],
-    name: 'jewel-restart-helper',
-    HostConfig: {
-      AutoRemove: true,
-      Binds: helperBinds
+  // Launch helper container — alpine + script that installs deps and runs install.sh
+  try {
+    const helper = await docker.createContainer({
+      Image: 'alpine:latest',
+      Cmd: ['sh', '/data/jewel-update.sh'],
+      name: 'jewel-update-helper',
+      HostConfig: {
+        AutoRemove: true,
+        Binds: helperBinds
+      }
+    });
+    await helper.start();
+  } catch (err) {
+    // If alpine isn't available locally, try to pull it
+    try {
+      await new Promise((resolve, reject) => {
+        docker.pull('alpine:latest', (err, stream) => {
+          if (err) return reject(err);
+          docker.modem.followProgress(stream, (e) => e ? reject(e) : resolve());
+        });
+      });
+      const helper = await docker.createContainer({
+        Image: 'alpine:latest',
+        Cmd: ['sh', '/data/jewel-update.sh'],
+        name: 'jewel-update-helper',
+        HostConfig: {
+          AutoRemove: true,
+          Binds: helperBinds
+        }
+      });
+      await helper.start();
+    } catch (e) {
+      updating = false;
+      try { fs.unlinkSync(UPDATING_FILE); } catch { /* ignore */ }
+      throw new Error('Failed to start update helper: ' + e.message);
     }
-  });
+  }
 
-  await helper.start();
-
-  // CRITICAL: set restart policy to "no" on the current container.
-  // Without this, Docker's "restart: unless-stopped" would restart the OLD
-  // container immediately after process.exit(0).
-  await currentContainer.update({ RestartPolicy: { Name: 'no' } });
+  // Set restart policy to "no" so this container doesn't auto-restart
+  // when install.sh stops it.
+  try {
+    await docker.getContainer(hostname).update({ RestartPolicy: { Name: 'no' } });
+  } catch { /* best effort */ }
 
   updateAvailable = false;
   latestRemoteInfo = null;
 
   return { success: true, restarting: true };
-}
-
-function shellQ(s) {
-  return "'" + String(s).replace(/'/g, "'\\''") + "'";
 }
 
 module.exports = {
@@ -313,6 +283,5 @@ module.exports = {
   isUpdating,
   clearUpdatingFlag,
   getUpdateInfo,
-  applyUpdate,
-  scheduleRestart
+  applyUpdate
 };

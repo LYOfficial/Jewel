@@ -6,9 +6,6 @@ const Containers = {
       <div class="card-header" style="margin-bottom:16px">
         <div class="card-title" data-i18n="container.list">容器列表</div>
         <div>
-          <label style="font-size:12px;color:var(--text-muted)">
-            <input type="checkbox" id="showAllContainers"> <span data-i18n="container.showAll">显示已停止</span>
-          </label>
           <button class="btn btn-sm" id="refreshContainers" data-i18n="common.refresh">刷新</button>
         </div>
       </div>
@@ -16,7 +13,6 @@ const Containers = {
     `;
     I18n.apply();
 
-    document.getElementById('showAllContainers').addEventListener('change', () => this.loadList());
     document.getElementById('refreshContainers').addEventListener('click', () => this.loadList());
 
     // Close dropdown when clicking outside
@@ -33,9 +29,8 @@ const Containers = {
   },
 
   async loadList() {
-    const showAll = document.getElementById('showAllContainers')?.checked;
     try {
-      const containers = await API.getContainers(showAll);
+      const containers = await API.getContainers(true);
       const el = document.getElementById('containersList');
 
       if (!containers || containers.length === 0) {

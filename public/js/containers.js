@@ -152,27 +152,29 @@ const Containers = {
 
     const name = (info.Name || '').replace(/^\//, '') || id.substring(0, 12);
     const image = info.Config?.Image || '-';
-    const volumeMounts = (info.Mounts || []).filter(m => m.Type === 'volume');
-    const volumeNames = volumeMounts.map(m => m.Name).filter(Boolean);
+    const allMounts = info.Mounts || [];
+    const mountSummary = allMounts.map(m => {
+      const label = m.Type === 'volume' ? (m.Name || '<anonymous>') : m.Source;
+      return `${label} → ${m.Destination}`;
+    });
 
     const content = `
       <div class="rm-info">
-        <div class="rm-row"><span class="rm-label" data-i18n="container.name">名称</span><span class="rm-value">${esc(name)}</span></div>
-        <div class="rm-row"><span class="rm-label" data-i18n="container.image">镜像</span><span class="rm-value"><small>${esc(image)}</small></span></div>
-        ${volumeNames.length ? `<div class="rm-row"><span class="rm-label" data-i18n="container.volumes">卷</span><span class="rm-value"><small>${volumeNames.map(esc).join(', ')}</small></span></div>` : ''}
+        <div class="rm-row"><span class="rm-label">${I18n.t('container.name') || '名称'}</span><span class="rm-value">${esc(name)}</span></div>
+        <div class="rm-row"><span class="rm-label">${I18n.t('container.image') || '镜像'}</span><span class="rm-value"><small>${esc(image)}</small></span></div>
+        ${mountSummary.length ? `<div class="rm-row"><span class="rm-label">${I18n.t('container.mounts') || '挂载'}</span><span class="rm-value"><small>${mountSummary.map(esc).join('<br>')}</small></span></div>` : ''}
       </div>
       <div class="rm-options">
-        ${volumeNames.length ? `
         <label class="rm-check">
           <input type="checkbox" id="rmVolumes">
-          <span data-i18n="container.removeVolumes">同时删除挂载卷（数据将永久丢失）</span>
-        </label>` : ''}
+          <span>${I18n.t('container.removeVolumes') || '同时删除挂载卷（数据将永久丢失）'}</span>
+        </label>
         <label class="rm-check">
           <input type="checkbox" id="rmImage">
-          <span data-i18n="container.removeImage">同时删除镜像（其他容器仍在使用时跳过）</span>
+          <span>${I18n.t('container.removeImage') || '同时删除镜像（其他容器仍在使用时跳过）'}</span>
         </label>
       </div>
-      <p class="rm-warn" data-i18n="container.removeWarn">此操作不可撤销。</p>
+      <p class="rm-warn">${I18n.t('container.removeWarn') || '此操作不可撤销。'}</p>
     `;
 
     Modal.show(I18n.t('container.confirmRemoveTitle') || '删除容器', content, [
@@ -193,7 +195,6 @@ const Containers = {
         }
       }
     ]);
-    I18n.apply();
   },
 
   toggleMenu(id) {

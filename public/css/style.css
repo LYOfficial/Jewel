@@ -383,6 +383,11 @@ textarea { resize: vertical; min-height: 80px; }
   outline: none;
 }
 .note-editor:focus { border-color: var(--border-focus); }
+.note-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
 
 /* Calendar */
 .calendar { padding: 4px; }

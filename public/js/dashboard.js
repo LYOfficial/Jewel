@@ -194,8 +194,7 @@ const Dashboard = {
   },
 
   switchNote(tab) {
-    // Auto-save current before switching
-    this.saveCurrentNote();
+    this.saveCurrentNote(true);
     this.currentNote = tab;
     document.querySelectorAll('.notebook-tab').forEach(t =>
       t.classList.toggle('active', t.dataset.note === tab)
@@ -220,7 +219,12 @@ const Dashboard = {
         ? '2026-01-01  Did something...\n2026-01-02  Todo: fix bug'
         : '';
 
-    el.innerHTML = `<textarea class="note-editor" id="noteEditor" placeholder="${placeholder}">${esc(val)}</textarea>`;
+    el.innerHTML = `<textarea class="note-editor" id="noteEditor" placeholder="${placeholder}">${esc(val)}</textarea>
+      <div class="note-actions">
+        <button class="btn btn-sm" id="saveNoteBtn" data-i18n="common.save">保存</button>
+      </div>`;
+
+    document.getElementById('saveNoteBtn')?.addEventListener('click', () => this.saveCurrentNote());
   },
 
   renderCalendar() {
@@ -252,17 +256,23 @@ const Dashboard = {
     return html;
   },
 
-  async saveCurrentNote() {
+  async saveCurrentNote(silent = false) {
     const editor = document.getElementById('noteEditor');
     if (!editor) return;
     const key = this.currentNote;
     if (key === 'calendar') return;
     const val = editor.value;
-    if (val === this.notesData[key]) return;
+    if (val === this.notesData[key]) {
+      if (!silent) Notify.success(I18n.t('common.saved') || 'Saved');
+      return;
+    }
     this.notesData[key] = val;
     try {
       await API.updateNotes({ [key]: val });
-    } catch { /* ignore */ }
+      if (!silent) Notify.success(I18n.t('common.saved') || 'Saved');
+    } catch (err) {
+      if (!silent) Notify.error(err.message);
+    }
   }
 };
 

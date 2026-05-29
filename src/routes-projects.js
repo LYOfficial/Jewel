@@ -23,7 +23,7 @@ router.get('/:id', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, git_url, git_token, git_branch, compose_path, env_vars, auto_deploy } = req.body;
+  const { name, git_url, git_token, git_branch, compose_path, env_vars, auto_deploy, container_name, reuse_volumes } = req.body;
 
   if (!name || !git_url) {
     return res.status(400).json({ error: 'Name and git_url are required' });
@@ -32,8 +32,8 @@ router.post('/', async (req, res) => {
   const webhookSecret = auto_deploy ? crypto.randomBytes(32).toString('hex') : '';
 
   const result = db.prepare(`
-    INSERT INTO projects (name, git_url, git_token, git_branch, compose_path, env_vars, auto_deploy, webhook_secret)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO projects (name, git_url, git_token, git_branch, compose_path, env_vars, auto_deploy, webhook_secret, container_name, reuse_volumes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name,
     git_url,
@@ -42,7 +42,9 @@ router.post('/', async (req, res) => {
     compose_path || 'docker-compose.yml',
     JSON.stringify(env_vars || {}),
     auto_deploy ? 1 : 0,
-    webhookSecret
+    webhookSecret,
+    container_name || '',
+    reuse_volumes ? 1 : 0
   );
 
   try {
@@ -68,10 +70,14 @@ router.put('/:id', (req, res) => {
     git_branch = project.git_branch,
     compose_path = project.compose_path,
     env_vars,
-    auto_deploy
+    auto_deploy,
+    container_name,
+    reuse_volumes
   } = req.body;
 
   const autoDeployVal = auto_deploy !== undefined ? (auto_deploy ? 1 : 0) : project.auto_deploy;
+  const containerNameVal = container_name !== undefined ? container_name : project.container_name;
+  const reuseVolumesVal = reuse_volumes !== undefined ? (reuse_volumes ? 1 : 0) : project.reuse_volumes;
   let webhookSecret = project.webhook_secret;
   if (autoDeployVal && !webhookSecret) {
     webhookSecret = crypto.randomBytes(32).toString('hex');
@@ -79,11 +85,11 @@ router.put('/:id', (req, res) => {
 
   db.prepare(`
     UPDATE projects SET name=?, git_url=?, git_token=?, git_branch=?, compose_path=?,
-    env_vars=?, auto_deploy=?, webhook_secret=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
+    env_vars=?, auto_deploy=?, webhook_secret=?, container_name=?, reuse_volumes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
   `).run(
     name, git_url, git_token, git_branch, compose_path,
     JSON.stringify(env_vars || (() => { try { return JSON.parse(project.env_vars); } catch { return {}; } })()),
-    autoDeployVal, webhookSecret, req.params.id
+    autoDeployVal, webhookSecret, containerNameVal, reuseVolumesVal, req.params.id
   );
 
   const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);

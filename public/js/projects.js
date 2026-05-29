@@ -72,6 +72,10 @@ const Projects = {
         <input type="text" id="projName" required>
       </div>
       <div class="form-group">
+        <label data-i18n="project.containerName">容器名（选填）</label>
+        <input type="text" id="projContainerName" placeholder="e.g. my-app (留空使用默认)">
+      </div>
+      <div class="form-group">
         <label data-i18n="project.gitUrl">Git 仓库 URL</label>
         <input type="url" id="projGitUrl" placeholder="https://github.com/user/repo.git" required>
       </div>
@@ -99,6 +103,16 @@ const Projects = {
       </div>
       <div class="form-group">
         <label><input type="checkbox" id="projAutoDeploy"> <span data-i18n="project.autoDeploy">自动部署</span></label>
+      </div>
+      <div class="form-group">
+        <label class="experimental-label">
+          <input type="checkbox" id="projReuseVolumes">
+          <span data-i18n="project.reuseVolumes">复用本地挂载卷</span>
+          <span class="experimental-badge" data-i18n="common.experimental">测试性功能</span>
+        </label>
+        <small class="experimental-hint" data-i18n="project.reuseVolumesHint">
+          勾选后，若主机上已有同名容器，将先删除该容器（仅删容器，保留挂载卷），然后用新配置创建容器并复用原数据。
+        </small>
       </div>
     `;
     Modal.show(I18n.t('project.add') || '添加项目', content, [
@@ -135,11 +149,13 @@ const Projects = {
 
     const data = {
       name: document.getElementById('projName').value,
+      container_name: document.getElementById('projContainerName').value.trim(),
       git_url: document.getElementById('projGitUrl').value,
       git_token: gitToken,
       git_branch: document.getElementById('projBranch').value || 'main',
       compose_path: document.getElementById('projCompose').value || 'docker-compose.yml',
-      auto_deploy: document.getElementById('projAutoDeploy').checked
+      auto_deploy: document.getElementById('projAutoDeploy').checked,
+      reuse_volumes: document.getElementById('projReuseVolumes').checked
     };
 
     if (!data.name || !data.git_url) {
@@ -158,6 +174,47 @@ const Projects = {
   },
 
   async deploy(id) {
+    let project = null;
+    try {
+      project = await API.getProject(id);
+    } catch (err) {
+      Notify.error(err.message);
+      return;
+    }
+
+    // If reuse_volumes is enabled, show a warning modal first
+    if (project.reuse_volumes && project.container_name) {
+      const warningContent = `
+        <div class="rm-warn" style="font-size:14px;margin-bottom:12px">
+          <strong data-i18n="project.reuseVolumesWarning">⚠ 即将复用本地挂载卷</strong>
+        </div>
+        <p style="color:#ccc;font-size:13px;line-height:1.6;margin-bottom:12px" data-i18n="project.reuseVolumesWarning1">
+          此项目配置为复用宿主机上的现有挂载卷。如果当前主机上存在名为
+          <strong>${esc(project.container_name)}</strong>
+          的容器，将先删除该容器（仅删容器，保留卷），然后用新镜像创建容器并复用原数据。
+        </p>
+        <p style="color:#fa0;font-size:13px;line-height:1.6" data-i18n="project.reuseVolumesWarning2">
+          <strong>请先备份好挂载卷内的数据，防止数据丢失！</strong>
+          此功能为测试性功能，请谨慎使用。
+        </p>
+      `;
+
+      Modal.show(I18n.t('project.deploy') || '部署', warningContent, [
+        { label: I18n.t('common.cancel') || '取消', class: 'btn-secondary' },
+        {
+          label: I18n.t('project.confirmDeploy') || '我已备份，继续部署',
+          class: 'btn-danger',
+          onClick: () => this.doDeploy(id)
+        }
+      ]);
+      I18n.apply();
+      return;
+    }
+
+    await this.doDeploy(id);
+  },
+
+  async doDeploy(id) {
     try {
       Notify.info(I18n.t('project.deploying') || 'Deploying...');
       await API.deployProject(id);
@@ -214,6 +271,10 @@ const Projects = {
           <input type="text" id="detailName" value="${esc(project.name)}">
         </div>
         <div class="form-group">
+          <label data-i18n="project.containerName">容器名（选填）</label>
+          <input type="text" id="detailContainerName" value="${esc(project.container_name || '')}" placeholder="e.g. my-app (留空使用默认)">
+        </div>
+        <div class="form-group">
           <label data-i18n="project.gitUrl">Git 仓库 URL</label>
           <input type="url" id="detailGitUrl" value="${esc(project.git_url)}">
         </div>
@@ -241,6 +302,16 @@ const Projects = {
         </div>
         <div class="form-group">
           <label><input type="checkbox" id="detailAutoDeploy" ${project.auto_deploy ? 'checked' : ''}> <span data-i18n="project.autoDeploy">自动部署</span></label>
+        </div>
+        <div class="form-group">
+          <label class="experimental-label">
+            <input type="checkbox" id="detailReuseVolumes" ${project.reuse_volumes ? 'checked' : ''}>
+            <span data-i18n="project.reuseVolumes">复用本地挂载卷</span>
+            <span class="experimental-badge" data-i18n="common.experimental">测试性功能</span>
+          </label>
+          <small class="experimental-hint" data-i18n="project.reuseVolumesHint">
+            勾选后，若主机上已有同名容器，将先删除该容器（仅删容器，保留挂载卷），然后用新配置创建容器并复用原数据。
+          </small>
         </div>
         ${project.webhook_secret ? `
         <div class="form-group">
@@ -296,11 +367,13 @@ const Projects = {
 
     const data = {
       name: document.getElementById('detailName').value,
+      container_name: document.getElementById('detailContainerName').value.trim(),
       git_url: document.getElementById('detailGitUrl').value,
       git_token: gitToken,
       git_branch: document.getElementById('detailBranch').value,
       compose_path: document.getElementById('detailCompose').value,
-      auto_deploy: document.getElementById('detailAutoDeploy').checked
+      auto_deploy: document.getElementById('detailAutoDeploy').checked,
+      reuse_volumes: document.getElementById('detailReuseVolumes').checked
     };
 
     const envVars = {};

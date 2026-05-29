@@ -762,6 +762,34 @@ tr:hover { background: var(--bg-hover); }
   margin-top: 4px;
 }
 
+/* ====== Experimental Feature Marker ====== */
+.experimental-label {
+  display: flex !important;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  cursor: pointer;
+}
+.experimental-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fa0;
+  background: rgba(255, 170, 0, 0.12);
+  border: 1px solid rgba(255, 170, 0, 0.4);
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+.experimental-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #888;
+  line-height: 1.5;
+  padding-left: 22px;
+}
+
 /* ====== Modal ====== */
 .modal {
   position: fixed;

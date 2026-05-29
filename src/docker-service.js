@@ -193,6 +193,19 @@ function ensureEnvFiles(projectDir, composePath) {
   }
 }
 
+async function findContainerByName(name) {
+  if (!name) return null;
+  try {
+    const containers = await listContainers(true);
+    const match = containers.find(c =>
+      (c.Names || []).some(n => n === `/${name}` || n === name)
+    );
+    return match || null;
+  } catch {
+    return null;
+  }
+}
+
 async function deployProject(project) {
   const projectDir = path.join(
     process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
@@ -219,6 +232,43 @@ async function deployProject(project) {
   // Always write .env so docker compose never fails on a missing env_file
   const envFile = path.join(projectDir, '.env');
   fs.writeFileSync(envFile, envStr || '', 'utf-8');
+
+  // If a custom container_name is set, inject it into the compose file.
+  // Also: handle reuse_volumes — if an existing container with the same name
+  // is running, either fail or remove it (keeping the volumes).
+  if (project.container_name) {
+    const customName = project.container_name;
+    const existing = await findContainerByName(customName);
+
+    if (existing) {
+      if (!project.reuse_volumes) {
+        throw new Error(
+          `A container named "${customName}" already exists. ` +
+          `Enable "Reuse existing volumes" in the project settings to replace it (volumes will be kept).`
+        );
+      }
+      // Remove the existing container but keep its volumes (v: false)
+      try {
+        const c = await getContainer(existing.Id);
+        await c.remove({ force: true, v: false });
+      } catch (err) {
+        throw new Error(`Failed to remove existing container "${customName}": ${err.message}`);
+      }
+    }
+
+    // Inject container_name into the first service of the compose file
+    try {
+      const composeDoc = yaml.load(fs.readFileSync(composePath, 'utf-8')) || {};
+      const services = composeDoc.services || {};
+      const firstServiceKey = Object.keys(services)[0];
+      if (firstServiceKey) {
+        services[firstServiceKey].container_name = customName;
+        fs.writeFileSync(composePath, yaml.dump(composeDoc), 'utf-8');
+      }
+    } catch (err) {
+      throw new Error(`Failed to update compose file with container_name: ${err.message}`);
+    }
+  }
 
   const composeCmd = process.env.COMPOSE_CMD || 'docker compose';
   const cmd = `${composeCmd} -f "${composePath}" --project-name "${project.name}" up -d --build`;
@@ -291,5 +341,6 @@ module.exports = {
   stopProject,
   getProjectContainers,
   getDockerInfo,
-  ensureEnvFiles
+  ensureEnvFiles,
+  findContainerByName
 };

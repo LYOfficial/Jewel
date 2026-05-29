@@ -38,6 +38,8 @@ db.exec(`
     webhook_secret TEXT DEFAULT '',
     status TEXT DEFAULT 'idle',
     is_self INTEGER DEFAULT 0,
+    container_name TEXT DEFAULT '',
+    reuse_volumes INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -57,6 +59,16 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
+
+// Schema migrations: add columns that may not exist on older installations
+function addColumnIfMissing(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.find(c => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+addColumnIfMissing('projects', 'container_name', "TEXT DEFAULT ''");
+addColumnIfMissing('projects', 'reuse_volumes', 'INTEGER DEFAULT 0');
 
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
 if (userCount.count === 0) {

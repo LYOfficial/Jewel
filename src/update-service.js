@@ -67,6 +67,48 @@ function detectCurrentDate() {
   return null;
 }
 
+async function getCurrentCommitInfo() {
+  const current = detectCurrentCommit();
+  if (!current || current === 'unknown') return null;
+
+  // Try to get commit info from GitHub API
+  return new Promise((resolve) => {
+    const options = {
+      hostname: 'api.github.com',
+      path: `/repos/LYOfficial/Jewel/commits/${current}`,
+      headers: {
+        'User-Agent': 'Jewel-App',
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.sha) {
+            resolve({
+              sha: parsed.sha,
+              date: parsed.commit?.committer?.date || null,
+              message: (parsed.commit?.message || '').split('\n')[0]
+            });
+          } else {
+            resolve(null);
+          }
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+
+    req.on('error', () => resolve(null));
+    req.setTimeout(10000, () => { req.destroy(); resolve(null); });
+    req.end();
+  });
+}
+
 function detectCurrentVersion() {
   try {
     const pkg = require('../package.json');
@@ -128,12 +170,21 @@ async function checkForUpdate() {
 
     const current = detectCurrentCommit();
     if (!current) {
+      // First run: save remote as current so we don't falsely report an update
       saveCurrentCommit(remote.sha);
-      latestRemoteInfo = remote;
+      updateAvailable = false;
+      latestRemoteInfo = null;
       return false;
     }
 
     if (!loadCurrentCommit()) {
+      saveCurrentCommit(current);
+    }
+
+    // If the persisted commit is stale (doesn't match what git/env reports),
+    // update it so we don't show outdated info
+    const persisted = loadCurrentCommit();
+    if (persisted && persisted !== current) {
       saveCurrentCommit(current);
     }
 
@@ -152,13 +203,28 @@ async function checkForUpdate() {
   }
 }
 
-function getUpdateInfo() {
+async function getUpdateInfo() {
   const current = detectCurrentCommit();
+  let currentDate = detectCurrentDate();
+  let currentMessage = null;
+  let currentVersionFromCommit = null;
+
+  // If we can't detect date from local git, try fetching it from GitHub API
+  if (!currentDate && current && current !== 'unknown') {
+    const info = await getCurrentCommitInfo();
+    if (info) {
+      currentDate = info.date;
+      currentMessage = info.message;
+      currentVersionFromCommit = detectLatestVersion(info.message);
+    }
+  }
+
   return {
     available: updateAvailable,
-    currentVersion: detectCurrentVersion(),
+    currentVersion: currentVersionFromCommit || detectCurrentVersion(),
     currentCommit: current || 'unknown',
-    currentDate: detectCurrentDate(),
+    currentDate: currentDate,
+    currentMessage: currentMessage,
     latestVersion: latestRemoteInfo ? detectLatestVersion(latestRemoteInfo.message) : null,
     latestCommit: latestRemoteInfo?.sha || null,
     latestDate: latestRemoteInfo?.date || null,

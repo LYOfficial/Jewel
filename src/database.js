@@ -85,7 +85,8 @@ if (userCount.count === 0) {
 
 const defaultSettings = {
   'language': 'zh-CN',
-  'git_provider': 'github'
+  'git_provider': 'github',
+  'timezone': 'Asia/Shanghai'
 };
 const upsertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 for (const [key, value] of Object.entries(defaultSettings)) {

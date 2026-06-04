@@ -1,5 +1,41 @@
 const Settings = {
+  timezones: [
+    { value: 'Pacific/Midway', label: 'UTC-11:00 Midway Island' },
+    { value: 'Pacific/Honolulu', label: 'UTC-10:00 Hawaii' },
+    { value: 'America/Anchorage', label: 'UTC-09:00 Alaska' },
+    { value: 'America/Los_Angeles', label: 'UTC-08:00 Pacific Time' },
+    { value: 'America/Denver', label: 'UTC-07:00 Mountain Time' },
+    { value: 'America/Chicago', label: 'UTC-06:00 Central Time' },
+    { value: 'America/New_York', label: 'UTC-05:00 Eastern Time' },
+    { value: 'America/Sao_Paulo', label: 'UTC-03:00 São Paulo' },
+    { value: 'Atlantic/Reykjavik', label: 'UTC+00:00 Iceland' },
+    { value: 'Europe/London', label: 'UTC+00:00 London' },
+    { value: 'Europe/Berlin', label: 'UTC+01:00 Berlin' },
+    { value: 'Europe/Paris', label: 'UTC+01:00 Paris' },
+    { value: 'Africa/Lagos', label: 'UTC+01:00 Lagos' },
+    { value: 'Europe/Helsinki', label: 'UTC+02:00 Helsinki' },
+    { value: 'Africa/Cairo', label: 'UTC+02:00 Cairo' },
+    { value: 'Europe/Moscow', label: 'UTC+03:00 Moscow' },
+    { value: 'Asia/Dubai', label: 'UTC+04:00 Dubai' },
+    { value: 'Asia/Karachi', label: 'UTC+05:00 Karachi' },
+    { value: 'Asia/Kolkata', label: 'UTC+05:30 Kolkata' },
+    { value: 'Asia/Dhaka', label: 'UTC+06:00 Dhaka' },
+    { value: 'Asia/Bangkok', label: 'UTC+07:00 Bangkok' },
+    { value: 'Asia/Shanghai', label: 'UTC+08:00 北京 / Shanghai' },
+    { value: 'Asia/Hong_Kong', label: 'UTC+08:00 Hong Kong' },
+    { value: 'Asia/Singapore', label: 'UTC+08:00 Singapore' },
+    { value: 'Asia/Taipei', label: 'UTC+08:00 Taipei' },
+    { value: 'Asia/Tokyo', label: 'UTC+09:00 東京 / Tokyo' },
+    { value: 'Asia/Seoul', label: 'UTC+09:00 Seoul' },
+    { value: 'Australia/Sydney', label: 'UTC+10:00 Sydney' },
+    { value: 'Pacific/Auckland', label: 'UTC+12:00 Auckland' }
+  ],
+
   async render(container) {
+    const tzOptions = this.timezones.map(tz =>
+      `<option value="${tz.value}">${esc(tz.label)}</option>`
+    ).join('');
+
     container.innerHTML = `
       <div class="card">
         <div class="card-header">
@@ -20,6 +56,13 @@ const Settings = {
             <option value="github">GitHub</option>
             <option value="gitlab">GitLab</option>
           </select>
+        </div>
+        <div class="form-group">
+          <label data-i18n="settings.timezone">时区</label>
+          <select id="settingTimezone">
+            ${tzOptions}
+          </select>
+          <div id="timezonePreview" style="color:var(--text-muted);font-size:12px;margin-top:4px"></div>
         </div>
         <button class="btn btn-primary" id="saveSettings" data-i18n="common.save">保存</button>
       </div>
@@ -60,25 +103,48 @@ const Settings = {
       const settings = await API.getSettings();
       document.getElementById('settingLanguage').value = settings.language || 'zh-CN';
       document.getElementById('settingGitProvider').value = settings.git_provider || 'github';
+      document.getElementById('settingTimezone').value = settings.timezone || 'Asia/Shanghai';
+      this.updateTimezonePreview(settings.timezone || 'Asia/Shanghai');
     } catch { /* ignore */ }
 
     document.getElementById('saveSettings').addEventListener('click', () => this.saveSettings());
     document.getElementById('changePwdBtn').addEventListener('click', () => this.changePassword());
     document.getElementById('refreshUpdateBtn').addEventListener('click', () => this.checkUpdate(true));
 
+    document.getElementById('settingTimezone').addEventListener('change', (e) => {
+      this.updateTimezonePreview(e.target.value);
+    });
+
     this.loadSystemInfo();
     this.checkUpdate();
   },
 
+  updateTimezonePreview(tz) {
+    const el = document.getElementById('timezonePreview');
+    if (!el) return;
+    try {
+      const now = new Date();
+      const formatted = now.toLocaleString('en-US', { timeZone: tz, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      el.textContent = `${I18n.t('settings.currentTime') || 'Current time'}: ${formatted}`;
+    } catch {
+      el.textContent = '';
+    }
+  },
+
   async saveSettings() {
     try {
+      const tz = document.getElementById('settingTimezone').value;
       await API.updateSettings({
         language: document.getElementById('settingLanguage').value,
-        git_provider: document.getElementById('settingGitProvider').value
+        git_provider: document.getElementById('settingGitProvider').value,
+        timezone: tz
       });
+      localStorage.setItem('jewel-timezone', tz);
       const lang = document.getElementById('settingLanguage').value;
       await I18n.setLang(lang);
       Notify.success(I18n.t('common.saved') || 'Saved');
+      // Reload system info to reflect new timezone
+      this.loadSystemInfo();
     } catch (err) { Notify.error(err.message); }
   },
 
@@ -101,18 +167,21 @@ const Settings = {
   async loadSystemInfo() {
     const el = document.getElementById('systemInfo');
     try {
-      const info = await API.getSystemInfo();
+      const [info, tzInfo] = await Promise.all([API.getSystemInfo(), API.getTimezone()]);
       el.innerHTML = `<table>
         <tr><td style="color:var(--text-muted)">Version</td><td>${info.version || '-'}</td></tr>
         <tr><td style="color:var(--text-muted)">Node.js</td><td>${info.nodeVersion || '-'}</td></tr>
         <tr><td style="color:var(--text-muted)">Platform</td><td>${info.platform || '-'}</td></tr>
         <tr><td style="color:var(--text-muted)">Uptime</td><td>${Math.floor(info.uptime / 60)} min</td></tr>
+        <tr><td style="color:var(--text-muted)" data-i18n="settings.timezone">时区</td><td>${esc(tzInfo.timezone)} (${esc(tzInfo.utcOffset)})</td></tr>
+        <tr><td style="color:var(--text-muted)" data-i18n="settings.currentTime">当前时间</td><td>${esc(tzInfo.currentTime)}</td></tr>
         ${info.docker ? `
         <tr><td style="color:var(--text-muted)">Docker</td><td>Connected</td></tr>
         <tr><td style="color:var(--text-muted)">Containers</td><td>${info.docker.Containers || '-'}</td></tr>
         <tr><td style="color:var(--text-muted)">Images</td><td>${info.docker.Images || '-'}</td></tr>
         ` : `<tr><td style="color:var(--text-muted)">Docker</td><td style="color:var(--warning)">Not Connected</td></tr>`}
       </table>`;
+      I18n.apply();
     } catch {
       el.innerHTML = `<p style="color:var(--text-muted)">Unable to load system info</p>`;
     }
@@ -134,6 +203,14 @@ const Settings = {
             <td style="color:var(--text-muted)" data-i18n="update.currentVersion">当前版本</td>
             <td>v${esc(info.currentVersion)} <span class="commit-sha">${curCommitShort}</span> <span class="commit-date">${curDate}</span></td>
           </tr>`;
+
+      if (info.currentMessage) {
+        html += `
+          <tr>
+            <td style="color:var(--text-muted)" data-i18n="update.commitMessage">提交信息</td>
+            <td>${esc(info.currentMessage)}</td>
+          </tr>`;
+      }
 
       if (info.available) {
         const latCommitShort = info.latestCommit ? info.latestCommit.substring(0, 7) : 'unknown';
@@ -185,6 +262,7 @@ const Settings = {
 function formatDate(dateStr) {
   try {
     const d = new Date(dateStr);
-    return d.toLocaleString();
+    const tz = localStorage.getItem('jewel-timezone') || 'Asia/Shanghai';
+    return d.toLocaleString('en-US', { timeZone: tz, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
   } catch { return dateStr; }
 }

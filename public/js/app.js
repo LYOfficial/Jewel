@@ -25,6 +25,14 @@ const App = {
     }
     I18n.apply();
 
+    // Load timezone from server settings if not cached locally
+    if (!localStorage.getItem('jewel-timezone')) {
+      try {
+        const settings = await API.getSettings();
+        if (settings.timezone) localStorage.setItem('jewel-timezone', settings.timezone);
+      } catch { /* ignore */ }
+    }
+
     this.bindEvents();
     this.navigate('dashboard');
     this.pollUpdate();

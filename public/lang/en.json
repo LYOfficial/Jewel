@@ -142,6 +142,8 @@
   "settings.general": "General Settings",
   "settings.language": "Language",
   "settings.gitProvider": "Git Provider",
+  "settings.timezone": "Timezone",
+  "settings.currentTime": "Current Time",
   "settings.systemInfo": "System Information",
   "settings.update": "System Update",
   "settings.account": "Account Management",

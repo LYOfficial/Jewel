@@ -110,6 +110,7 @@ const API = {
   applyUpdate() { return this.post('/system/update/apply'); },
   getSettings() { return this.get('/system/settings'); },
   updateSettings(data) { return this.put('/system/settings', data); },
+  getTimezone() { return this.get('/system/timezone'); },
   getNotes() { return this.get('/system/notes'); },
   updateNotes(data) { return this.put('/system/notes', data); }
 };

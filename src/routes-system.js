@@ -171,12 +171,12 @@ const fs = require('fs');
 router.get('/update/check', async (req, res) => {
   // Always do a live check when user explicitly asks
   await updateService.checkForUpdate();
-  res.json(updateService.getUpdateInfo());
+  res.json(await updateService.getUpdateInfo());
 });
 
 router.post('/update/check', async (req, res) => {
   await updateService.checkForUpdate();
-  res.json(updateService.getUpdateInfo());
+  res.json(await updateService.getUpdateInfo());
 });
 
 router.post('/update/apply', async (req, res) => {
@@ -194,6 +194,38 @@ router.get('/settings', (req, res) => {
   for (const s of settings) obj[s.key] = s.value;
   res.json(obj);
 });
+
+router.get('/timezone', (req, res) => {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'timezone'").get();
+  const tz = row ? row.value : 'Asia/Shanghai';
+  try {
+    const now = new Date();
+    const formatted = now.toLocaleString('en-US', { timeZone: tz, hour12: false });
+    const offset = getUTCOffset(tz);
+    res.json({ timezone: tz, currentTime: formatted, utcOffset: offset });
+  } catch {
+    res.json({ timezone: tz, currentTime: new Date().toISOString(), utcOffset: '+00:00' });
+  }
+});
+
+function getUTCOffset(tz) {
+  try {
+    const now = new Date();
+    const utcStr = now.toLocaleString('en-US', { timeZone: 'UTC', hour12: false });
+    const tzStr = now.toLocaleString('en-US', { timeZone: tz, hour12: false });
+    const utcDate = new Date(utcStr);
+    const tzDate = new Date(tzStr);
+    const diffMs = tzDate - utcDate;
+    const diffMins = Math.round(diffMs / 60000);
+    const sign = diffMins >= 0 ? '+' : '-';
+    const absMins = Math.abs(diffMins);
+    const h = String(Math.floor(absMins / 60)).padStart(2, '0');
+    const m = String(absMins % 60).padStart(2, '0');
+    return `UTC${sign}${h}:${m}`;
+  } catch {
+    return 'UTC+00:00';
+  }
+}
 
 router.put('/settings', (req, res) => {
   const upsert = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');

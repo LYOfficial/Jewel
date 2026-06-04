@@ -228,10 +228,20 @@ const Dashboard = {
   },
 
   renderCalendar() {
+    const tz = localStorage.getItem('jewel-timezone') || 'Asia/Shanghai';
     const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const today = now.getDate();
+    let year, month, today;
+    try {
+      const tzStr = now.toLocaleString('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+      const tzParts = tzStr.split('/');
+      month = parseInt(tzParts[0]) - 1;
+      today = parseInt(tzParts[1]);
+      year = parseInt(tzParts[2]);
+    } catch {
+      year = now.getFullYear();
+      month = now.getMonth();
+      today = now.getDate();
+    }
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const monthNames = [

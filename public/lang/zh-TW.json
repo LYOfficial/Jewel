@@ -142,6 +142,8 @@
   "settings.general": "通用設定",
   "settings.language": "語言",
   "settings.gitProvider": "Git 服務商",
+  "settings.timezone": "時區",
+  "settings.currentTime": "目前時間",
   "settings.systemInfo": "系統資訊",
   "settings.update": "系統更新",
   "settings.account": "帳戶管理",

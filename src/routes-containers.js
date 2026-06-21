@@ -367,6 +367,96 @@ router.get('/host/browse', (req, res) => {
   }
 });
 
+// ===== Images =====
+//
+// We mount these under /containers/images/ so the existing auth middleware
+// in this router applies. The frontend reaches them via /api/containers/images/...
+
+router.get('/images', async (req, res) => {
+  try {
+    const all = req.query.all !== 'false';
+    const [images, usage] = await Promise.all([
+      dockerService.listImages(all),
+      dockerService.getContainerUsageByImage(all)
+    ]);
+
+    // Decorate each image with: in_use flag, containers using it, size, created
+    const decorated = images.map(img => {
+      const id = img.Id;
+      const containers = usage[id] || [];
+      // Trim image id (sha256:...) for display
+      const shortId = id ? id.replace(/^sha256:/, '').substring(0, 12) : '';
+      return {
+        ...img,
+        shortId,
+        in_use: containers.length > 0,
+        containers
+      };
+    });
+
+    // Sort: in-use first, then by size desc
+    decorated.sort((a, b) => {
+      if (a.in_use !== b.in_use) return a.in_use ? -1 : 1;
+      return (b.Size || 0) - (a.Size || 0);
+    });
+
+    const totalSize = decorated.reduce((s, i) => s + (i.Size || 0), 0);
+    const inUseSize = decorated.filter(i => i.in_use).reduce((s, i) => s + (i.Size || 0), 0);
+
+    res.json({
+      images: decorated,
+      totals: {
+        count: decorated.length,
+        inUseCount: decorated.filter(i => i.in_use).length,
+        unusedCount: decorated.filter(i => !i.in_use).length,
+        totalSize,
+        inUseSize,
+        unusedSize: totalSize - inUseSize
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/images/:id', async (req, res) => {
+  try {
+    const info = await dockerService.getImageInfo(req.params.id);
+    res.json(info);
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+router.get('/images/:id/history', async (req, res) => {
+  try {
+    const history = await dockerService.getImageHistory(req.params.id);
+    res.json({ history });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/images/:id', async (req, res) => {
+  try {
+    const force = req.query.force === 'true';
+    const noprune = req.query.noprune === 'true';
+    const result = await dockerService.removeImage(req.params.id, { force, noprune });
+    res.json({ message: 'Image removed', result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/images/prune', async (req, res) => {
+  try {
+    const result = await dockerService.pruneImages();
+    res.json({ message: 'Unused images pruned', result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Helpers
 function parseLsOutput(output, basePath) {
   const lines = output.split('\n').filter(l => l.trim());

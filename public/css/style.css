@@ -265,6 +265,20 @@ textarea { resize: vertical; min-height: 80px; }
   justify-content: center;
   font-size: 16px;
 }
+.nav-icon img {
+  width: 18px;
+  height: 18px;
+  display: block;
+  filter: invert(1) brightness(1.6);
+  opacity: 0.85;
+}
+.nav-item:hover .nav-icon img,
+.nav-item.active .nav-icon img {
+  opacity: 1;
+}
+.sidebar-nav a.nav-item {
+  text-decoration: none;
+}
 
 .sidebar-footer {
   padding: 12px 16px;
@@ -823,10 +837,11 @@ tr:hover { background: var(--bg-hover); }
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 28px;
-  min-width: 400px;
+  width: 600px;
   max-width: 90vw;
   max-height: 90vh;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 .modal-content h3 { font-weight: 400; margin-bottom: 16px; font-size: 18px; }
 .modal-desc { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; }
@@ -871,9 +886,13 @@ tr:hover { background: var(--bg-hover); }
   line-height: 1.6;
   color: var(--text-secondary);
   max-height: 400px;
+  min-height: 60px;
   overflow-y: auto;
+  overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-all;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* ====== Empty State ====== */

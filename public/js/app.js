@@ -1,5 +1,25 @@
 const App = {
   currentPage: 'dashboard',
+  // Map URL sub-paths to internal page names
+  pageMap: {
+    '/': 'dashboard',
+    '/dashboard': 'dashboard',
+    '/project': 'project',
+    '/projects': 'project',
+    '/containers': 'containers',
+    '/images': 'images',
+    '/tokens': 'tokens',
+    '/settings': 'settings'
+  },
+  // Reverse map: internal page name -> canonical sub-path
+  pagePaths: {
+    dashboard: '/dashboard',
+    project: '/project',
+    containers: '/containers',
+    images: '/images',
+    tokens: '/tokens',
+    settings: '/settings'
+  },
 
   async init() {
     const token = localStorage.getItem('jewel-token');
@@ -34,14 +54,27 @@ const App = {
     }
 
     this.bindEvents();
-    this.navigate('dashboard');
+
+    // Read the current URL path to determine the initial page
+    const initialPage = this.pathToPage(window.location.pathname);
+    // If user landed on root or an unknown path, replace the URL with the canonical sub-path
+    if (!window.location.pathname || window.location.pathname === '/' || !this.pageMap[window.location.pathname]) {
+      const canonical = this.pagePaths[initialPage] || '/dashboard';
+      window.history.replaceState({ page: initialPage }, '', canonical);
+    }
+    this.navigate(initialPage, { silent: true });
     this.pollUpdate();
   },
 
   bindEvents() {
     document.querySelectorAll('.nav-item[data-page]').forEach(item => {
-      item.addEventListener('click', () => {
-        this.navigate(item.getAttribute('data-page'));
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const page = item.getAttribute('data-page');
+        const path = this.pagePaths[page] || '/';
+        // Push state and navigate; do not let the link do a full reload
+        window.history.pushState({ page }, '', path);
+        this.navigate(page);
       });
     });
 
@@ -82,9 +115,23 @@ const App = {
         Notify.success(I18n.t('update.applying') || 'Update started. The container will restart in 1-3 minutes. Refresh the page after that.');
       } catch (err) { Notify.error(err.message); }
     });
+
+    // Handle browser back/forward navigation
+    window.addEventListener('popstate', (e) => {
+      const page = (e.state && e.state.page) || this.pathToPage(window.location.pathname);
+      this.navigate(page, { silent: true });
+    });
   },
 
-  navigate(page) {
+  // Translate a URL path to an internal page name
+  pathToPage(path) {
+    if (!path) return 'dashboard';
+    // Strip trailing slash for comparison
+    const p = path.replace(/\/+$/, '') || '/';
+    return this.pageMap[p] || 'dashboard';
+  },
+
+  navigate(page, options = {}) {
     this.currentPage = page;
     document.querySelectorAll('.nav-item[data-page]').forEach(item => {
       item.classList.toggle('active', item.getAttribute('data-page') === page);
@@ -97,13 +144,24 @@ const App = {
 
     if (Containers.destroy) Containers.destroy();
     if (Dashboard.destroy) Dashboard.destroy();
+    if (Images && Images.destroy) Images.destroy();
 
     switch (page) {
       case 'dashboard': Dashboard.render(container); break;
-      case 'projects': Projects.render(container); break;
+      case 'project': Projects.render(container); break;
       case 'containers': Containers.render(container); break;
+      case 'images':
+        if (typeof Images !== 'undefined') {
+          Images.render(container);
+        } else {
+          container.innerHTML = '<div class="empty-state"><p>Images module not loaded.</p></div>';
+        }
+        break;
       case 'tokens': Tokens.render(container); break;
       case 'settings': Settings.render(container); break;
+      default:
+        // Unknown page — fall back to dashboard
+        Dashboard.render(container);
     }
   },
 

@@ -133,30 +133,30 @@ const Projects = {
   },
 
   async createProject() {
+    // IMPORTANT: collect all form values synchronously first. The modal
+    // auto-closes as soon as this handler returns, so any DOM read that
+    // happens after an `await` will see an empty form.
     const tokenSelect = document.getElementById('projTokenSelect').value;
-    let gitToken = '';
-    if (tokenSelect === '__manual__') {
-      gitToken = document.getElementById('projGitToken').value;
-    } else if (tokenSelect) {
-      try {
-        const savedTokens = await API.getTokens();
-        const selected = savedTokens.find(t => String(t.id) === tokenSelect);
-        if (selected) {
-          const fullToken = await API.getToken(selected.id);
-          gitToken = fullToken.token || '';
-        }
-      } catch { /* ignore */ }
-    }
-
     const data = {
       name: document.getElementById('projName').value,
       container_name: document.getElementById('projContainerName').value.trim(),
       git_url: document.getElementById('projGitUrl').value,
-      git_token: gitToken,
+      git_token: '',
       git_branch: document.getElementById('projBranch').value || 'main',
       compose_path: document.getElementById('projCompose').value || 'docker-compose.yml',
       reuse_volumes: document.getElementById('projReuseVolumes').checked
     };
+
+    if (tokenSelect === '__manual__') {
+      data.git_token = document.getElementById('projGitToken').value;
+    } else if (tokenSelect) {
+      // Resolve the saved token's secret by id (sync in id, async in value).
+      // We don't need any other DOM values at this point.
+      try {
+        const fullToken = await API.getToken(tokenSelect);
+        data.git_token = (fullToken && fullToken.token) || '';
+      } catch { /* ignore — leave token empty */ }
+    }
 
     if (!data.name || !data.git_url) {
       Notify.error(I18n.t('project.nameAndUrlRequired') || 'Name and URL are required');
@@ -412,26 +412,27 @@ const Projects = {
   },
 
   async saveProject(id) {
+    // Collect DOM values synchronously before any await — the modal
+    // closes as soon as this handler returns.
     const tokenSelect = document.getElementById('detailTokenSelect').value;
-    let gitToken = '';
-    if (tokenSelect === '__manual__') {
-      gitToken = document.getElementById('detailGitToken').value;
-    } else if (tokenSelect) {
-      try {
-        const fullToken = await API.getToken(tokenSelect);
-        gitToken = fullToken.token || '';
-      } catch { /* ignore */ }
-    }
-
     const data = {
       name: document.getElementById('detailName').value,
       container_name: document.getElementById('detailContainerName').value.trim(),
       git_url: document.getElementById('detailGitUrl').value,
-      git_token: gitToken,
+      git_token: '',
       git_branch: document.getElementById('detailBranch').value,
       compose_path: document.getElementById('detailCompose').value,
       reuse_volumes: document.getElementById('detailReuseVolumes').checked
     };
+
+    if (tokenSelect === '__manual__') {
+      data.git_token = document.getElementById('detailGitToken').value;
+    } else if (tokenSelect) {
+      try {
+        const fullToken = await API.getToken(tokenSelect);
+        data.git_token = (fullToken && fullToken.token) || '';
+      } catch { /* ignore */ }
+    }
 
     const envVars = {};
     const envText = document.getElementById('envEditor').value;

@@ -2,7 +2,9 @@ const Docker = require('dockerode');
 const yaml = require('js-yaml');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { exec, execSync } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 
 let docker = null;
 let dockerAvailable = null;
@@ -320,13 +322,17 @@ async function deployProject(project) {
   appendDeployLog(project.id, `\n$ ${cmd}\n`);
 
   try {
-    const result = execSync(cmd, {
+    // Use async exec so the Node.js event loop stays responsive while
+    // docker compose runs. Previously this used execSync which blocked
+    // the entire server for the duration of the build, making the
+    // platform appear frozen until the deploy finished.
+    const result = await execAsync(cmd, {
       cwd: projectDir,
       timeout: 600000,
       env: { ...process.env },
-      stdio: 'pipe'
+      maxBuffer: 50 * 1024 * 1024
     });
-    const stdout = result.toString('utf-8');
+    const stdout = (result && result.stdout) ? result.stdout.toString('utf-8') : '';
     appendDeployLog(project.id, stdout);
     appendDeployLog(project.id, `\n=== Deploy succeeded at ${new Date().toISOString()} ===\n`);
     return stdout;
@@ -335,7 +341,7 @@ async function deployProject(project) {
     const stdout = (err.stdout && err.stdout.toString()) || '';
     if (stdout) appendDeployLog(project.id, stdout);
     if (stderr) appendDeployLog(project.id, stderr);
-    appendDeployLog(project.id, `\n[error] Command exited with code ${err.status}\n`);
+    appendDeployLog(project.id, `\n[error] Command exited with code ${err.code || err.status}\n`);
 
     // Auto-cleanup: tear down any partial state so the next deploy starts fresh.
     // - down: removes containers
@@ -345,8 +351,13 @@ async function deployProject(project) {
     const cleanupCmd = `${composeCmd} -f "${composePath}" --project-name "${project.name}" down --remove-orphans --rmi local`;
     appendDeployLog(project.id, `\n[cleanup] Tearing down partial deploy state\n$ ${cleanupCmd}\n`);
     try {
-      const cleanupOut = execSync(cleanupCmd, { cwd: projectDir, timeout: 120000, stdio: 'pipe' });
-      appendDeployLog(project.id, cleanupOut.toString('utf-8'));
+      const cleanupOut = await execAsync(cleanupCmd, {
+        cwd: projectDir,
+        timeout: 120000,
+        env: { ...process.env },
+        maxBuffer: 50 * 1024 * 1024
+      });
+      appendDeployLog(project.id, (cleanupOut && cleanupOut.stdout) ? cleanupOut.stdout.toString('utf-8') : '');
     } catch (cleanupErr) {
       const cstderr = (cleanupErr.stderr && cleanupErr.stderr.toString()) || '';
       const cstdout = (cleanupErr.stdout && cleanupErr.stdout.toString()) || '';
@@ -386,14 +397,16 @@ async function stopProject(project) {
   const cmd = `${composeCmd} -f "${composePath}" --project-name "${project.name}" down`;
 
   try {
-    const result = execSync(cmd, {
+    const result = await execAsync(cmd, {
       cwd: projectDir,
       timeout: 120000,
-      env: { ...process.env }
+      env: { ...process.env },
+      maxBuffer: 10 * 1024 * 1024
     });
-    return result.toString('utf-8');
+    return (result && result.stdout) ? result.stdout.toString('utf-8') : '';
   } catch (err) {
-    throw new Error(`Stop failed: ${err.message}`);
+    const detail = (err && err.message) || 'unknown error';
+    throw new Error(`Stop failed: ${detail}`);
   }
 }
 
@@ -408,6 +421,79 @@ async function getDockerInfo() {
   const d = getDocker();
   const info = await d.info();
   return info;
+}
+
+// ===== Images =====
+
+async function listImages(all = true) {
+  const d = getDocker();
+  return d.listImages({ all });
+}
+
+async function getImageInfo(id) {
+  const d = getDocker();
+  const image = d.getImage(id);
+  return image.inspect();
+}
+
+async function getImageHistory(id) {
+  const d = getDocker();
+  const image = d.getImage(id);
+  return image.history();
+}
+
+async function removeImage(id, options = {}) {
+  const d = getDocker();
+  const image = d.getImage(id);
+  const params = {};
+  if (options.force) params.force = true;
+  if (options.noprune) params.noprune = true;
+  return image.remove(params);
+}
+
+// Return a map of imageId -> array of {Id, Names, State, Status}
+async function getContainerUsageByImage(all = true) {
+  const d = getDocker();
+  const [containers, images] = await Promise.all([
+    d.listContainers({ all }),
+    d.listImages({ all })
+  ]);
+
+  // Build a lookup of imageId -> the canonical ImageId for each image
+  // (an image may be known by RepoDigests or just its Id).
+  const imageIds = new Set();
+  for (const img of images) {
+    if (img.Id) imageIds.add(img.Id);
+  }
+
+  const byImage = {};
+  for (const c of containers) {
+    const key = c.ImageID || c.Image || null;
+    if (!key) continue;
+    // Try direct match; otherwise try matching by repo:tag
+    let matchId = key;
+    if (!imageIds.has(key)) {
+      const found = images.find(img => (img.RepoTags || []).some(t => t === key));
+      if (found) matchId = found.Id;
+    }
+    if (!byImage[matchId]) byImage[matchId] = [];
+    byImage[matchId].push({
+      Id: c.Id,
+      Names: c.Names || [],
+      State: c.State,
+      Status: c.Status,
+      Image: c.Image
+    });
+  }
+  return byImage;
+}
+
+async function pruneImages() {
+  const d = getDocker();
+  // Prune only "dangling" filter is too aggressive (skips any image with a tag,
+  // even if no container is using it). Use {dangling: false, label: ''} by
+  // passing filters: [] which Docker API treats as "all unused".
+  return d.pruneImages({ filters: { dangling: { false: true } } });
 }
 
 module.exports = {
@@ -432,5 +518,11 @@ module.exports = {
   getDockerInfo,
   ensureEnvFiles,
   findContainerByName,
-  readDeployLog
+  readDeployLog,
+  listImages,
+  getImageInfo,
+  getImageHistory,
+  removeImage,
+  getContainerUsageByImage,
+  pruneImages
 };

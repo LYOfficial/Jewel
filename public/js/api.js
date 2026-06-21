@@ -19,7 +19,12 @@ const API = {
     const options = { method, headers };
     if (body) options.body = JSON.stringify(body);
 
-    const res = await fetch(`${this.baseUrl}${path}`, options);
+    let res;
+    try {
+      res = await fetch(`${this.baseUrl}${path}`, options);
+    } catch (err) {
+      throw new Error('Network error: ' + (err && err.message ? err.message : 'fetch failed'));
+    }
 
     if (res.status === 401) {
       this.clearToken();
@@ -32,7 +37,38 @@ const API = {
       throw new Error('Service upgrading');
     }
 
-    const data = await res.json();
+    // Read the response body as text first, then try to parse it as JSON.
+    // The server should always return JSON for /api/* routes, but in
+    // practice it sometimes returns HTML (e.g. when the SPA catch-all
+    // serves index.html for an unknown path, or when an unhandled
+    // exception escapes to Express's default error handler). Trying to
+    // parse such responses with res.json() throws a confusing
+    // "Unexpected token <" SyntaxError that the user sees as
+    // "缺少 '<'" / "缺少 ','".
+    let text = '';
+    try { text = await res.text(); } catch (err) { /* ignore */ }
+
+    let data = null;
+    if (text) {
+      const contentType = (res.headers.get('content-type') || '').toLowerCase();
+      if (contentType.includes('application/json') || text.trim().startsWith('{') || text.trim().startsWith('[')) {
+        try {
+          data = JSON.parse(text);
+        } catch (err) {
+          // Fall through; we'll build a clearer error below.
+        }
+      }
+    }
+
+    if (data === null) {
+      // Not JSON. Build a useful message from the first chunk of the body.
+      const snippet = (text || '').replace(/\s+/g, ' ').trim().substring(0, 160);
+      const msg = snippet
+        ? `Request failed (HTTP ${res.status}): ${snippet}`
+        : `Request failed (HTTP ${res.status})`;
+      throw new Error(msg);
+    }
+
     if (!res.ok) throw new Error(data.error || 'Request failed');
     return data;
   },
@@ -89,6 +125,18 @@ const API = {
   deleteContainerFile(id, p) { return this.del(`/containers/${id}/file?path=${encodeURIComponent(p)}`); },
   uploadToContainer(id, p, b64) { return this.post(`/containers/${id}/upload`, { path: p, content: b64 }); },
   browseHost(p = '/') { return this.get(`/containers/host/browse?path=${encodeURIComponent(p)}`); },
+
+  // Images
+  getImages(all = true) { return this.get(`/containers/images?all=${all}`); },
+  getImage(id) { return this.get(`/containers/images/${id}`); },
+  removeImage(id, options = {}) {
+    const params = new URLSearchParams();
+    if (options.force !== undefined) params.set('force', options.force);
+    if (options.noprune !== undefined) params.set('noprune', options.noprune);
+    return this.del(`/containers/images/${id}?${params.toString()}`);
+  },
+  pruneImages() { return this.post('/containers/images/prune'); },
+  getImageHistory(id) { return this.get(`/containers/images/${id}/history`); },
 
   // Git
   getGitRepos(token, provider, host) {

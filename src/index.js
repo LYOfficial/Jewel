@@ -20,7 +20,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // If updating flag is set, serve upgrading page for all non-static requests
 app.use((req, res, next) => {
-  if (updateService.isUpdating() && !req.path.startsWith('/css') && !req.path.startsWith('/js') && !req.path.startsWith('/img') && !req.path.startsWith('/lang')) {
+  if (updateService.isUpdating() && !req.path.startsWith('/css') && !req.path.startsWith('/js') && !req.path.startsWith('/img') && !req.path.startsWith('/lang') && !req.path.startsWith('/api')) {
     return res.status(503).sendFile(path.join(__dirname, '..', 'public', 'upgrading.html'));
   }
   next();
@@ -32,8 +32,19 @@ app.use('/api/containers', routesContainers);
 app.use('/api/git', routesGit);
 app.use('/api/system', routesSystem);
 app.use('/api/tokens', routesTokens);
+// Note: /api/images routes are mounted in routes-containers.js to keep them grouped with container ops
 
-app.get('*', (req, res) => {
+// Fallback error handler — ensure API errors return JSON, not HTML
+app.use((err, req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+  }
+  next(err);
+});
+
+// SPA catch-all: serve index.html for any non-API, non-static path so that
+// deep links like /containers, /project, /settings work after a page refresh.
+app.get(/^(?!\/api\/)(?!\/css\/)(?!\/js\/)(?!\/img\/)(?!\/lang\/)(?!\/login\.html)(?!\/upgrading\.html).*/, (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 

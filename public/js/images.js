@@ -217,9 +217,15 @@ const Images = {
     try {
       Notify.info(I18n.t('images.pruning') || '正在清理未使用镜像...');
       const result = await API.pruneImages();
-      // docker returns {SpaceReclaimed, ImagesDeleted: [...]} or similar depending on the driver
-      const reclaimed = (result && (result.SpaceReclaimed || (result[0] && result[0].SpaceReclaimed))) || 0;
-      const deleted = (result && (result.ImagesDeleted ? (Array.isArray(result.ImagesDeleted) ? result.ImagesDeleted.length : 0) : (Array.isArray(result) && result[0] && result[0].ImagesDeleted ? result.ImagesDeleted.length : 0))) || 0;
+      // Our backend now returns { SpaceReclaimed, ImagesDeleted, deleted, output }
+      // regardless of whether the call exited 0 or not (it can exit non-zero
+      // with "0 deleted" if there's nothing to prune on some Docker versions).
+      const reclaimed = (result && (result.SpaceReclaimed || 0)) || 0;
+      const deleted = (result && (
+        typeof result.deleted === 'number'
+          ? result.deleted
+          : (Array.isArray(result.ImagesDeleted) ? result.ImagesDeleted.length : 0)
+      )) || 0;
       Notify.success(
         (I18n.t('images.pruned') || '已清理 {n} 个未使用镜像，释放 {size}')
           .replace('{n}', deleted)

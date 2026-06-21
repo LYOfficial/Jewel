@@ -46,7 +46,7 @@ const Dashboard = {
           </div>
           <div id="recentProjects"></div>
         </div>
-        <div class="card dash-half">
+        <div class="card dash-half notebook-card">
           <div class="card-header">
             <div class="card-title" data-i18n="dashboard.notebook">备忘本</div>
             <div class="notebook-tabs" id="notebookTabs">
@@ -56,7 +56,7 @@ const Dashboard = {
               <button class="notebook-tab" data-note="daily" data-i18n="notes.daily">日常</button>
             </div>
           </div>
-          <div id="notebookContent"></div>
+          <div id="notebookContent" class="notebook-content"></div>
         </div>
       </div>
     `;
@@ -184,30 +184,68 @@ const Dashboard = {
 
   // ===== Notes =====
   currentNote: 'public',
-  // For 'public': string. For 'ports' / 'daily': array of {id, content, createdAt}.
+  // 'public': plain string. 'ports': array of {id, port, app, note, createdAt}.
+  // 'daily': array of {id, content, createdAt}.
   notesData: { public: '', ports: [], daily: [] },
 
-  // Decoded helper — the backend stores each note as a raw string, so older
-  // "ports" / "daily" values may still be a multi-line string instead of a
-  // JSON array. Treat both as a list of entries.
+  // Normalize any legacy value into the modern entry list.
+  // - For 'ports', convert each old string line into a {port, app, note}
+  //   object by splitting on 2+ spaces (or single spaces as a fallback).
+  // - For 'daily', each line becomes a single-content entry.
+  // - For already-array values, convert old shape (string content) on the fly.
   getNoteEntries(key) {
     const raw = this.notesData[key];
-    if (Array.isArray(raw)) return raw;
-    if (typeof raw === 'string' && raw.trim()) {
-      // Try JSON first
+    let arr;
+    if (Array.isArray(raw)) {
+      arr = raw;
+    } else if (typeof raw === 'string' && raw.trim()) {
       try {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
+        arr = Array.isArray(parsed) ? parsed : null;
       } catch { /* fall through */ }
-      // Fall back: split on newline and treat each non-empty line as an entry
-      return raw.split('\n')
-        .filter(l => l.trim())
-        .map((line, i) => ({ id: `legacy-${Date.now()}-${i}`, content: line, createdAt: null }));
+      if (!arr) {
+        arr = raw.split('\n').filter(l => l.trim());
+      }
+    } else {
+      return [];
     }
-    return [];
+    return arr.map((e, i) => this.normalizeEntry(key, e, i));
   },
 
-  // Persist a normalized list back to the backend as a JSON string.
+  normalizeEntry(key, raw, index) {
+    const id = (raw && raw.id) || `legacy-${Date.now()}-${index}`;
+    const createdAt = (raw && raw.createdAt) || null;
+
+    if (key === 'ports') {
+      if (raw && typeof raw === 'object' && (raw.port || raw.app || raw.note)) {
+        return {
+          id,
+          port: String(raw.port || '').trim(),
+          app: String(raw.app || '').trim(),
+          note: String(raw.note || '').trim(),
+          createdAt
+        };
+      }
+      // Legacy string: "330  Jewel  jewel.example.com"
+      const line = String(typeof raw === 'string' ? raw : (raw && raw.content) || '').trim();
+      const parts = line.split(/\s{2,}|\s+/).filter(Boolean);
+      return {
+        id,
+        port: parts[0] || '',
+        app: parts[1] || '',
+        note: parts.slice(2).join(' ') || '',
+        createdAt
+      };
+    }
+
+    // 'daily'
+    return {
+      id,
+      content: String(typeof raw === 'string' ? raw : (raw && raw.content) || ''),
+      createdAt
+    };
+  },
+
   async persistEntries(key, entries) {
     this.notesData[key] = entries;
     try {
@@ -241,22 +279,24 @@ const Dashboard = {
     if (!el) return;
 
     if (this.currentNote === 'calendar') {
-      el.innerHTML = this.renderCalendar();
+      el.innerHTML = `<div class="note-body">${this.renderCalendar()}</div>`;
       return;
     }
 
-    // 'public' keeps the original single-textarea editor.
     if (this.currentNote === 'public') {
       const val = this.notesData.public || '';
-      el.innerHTML = `<textarea class="note-editor" id="noteEditor" placeholder="${I18n.t('notes.publicPlaceholder') || ''}">${esc(val)}</textarea>
+      el.innerHTML = `
+        <div class="note-body">
+          <textarea class="note-editor" id="noteEditor" placeholder="${esc(I18n.t('notes.publicPlaceholder') || '')}">${esc(val)}</textarea>
+        </div>
         <div class="note-actions">
           <button class="btn btn-sm" id="saveNoteBtn" data-i18n="common.save">保存</button>
-        </div>`;
+        </div>
+      `;
       document.getElementById('saveNoteBtn')?.addEventListener('click', () => this.saveCurrentNote());
       return;
     }
 
-    // 'ports' and 'daily' use a multi-entry notepad.
     this.renderEntryList(this.currentNote);
   },
 
@@ -266,59 +306,131 @@ const Dashboard = {
 
     const entries = this.getNoteEntries(key);
     const isPorts = key === 'ports';
-    const placeholder = isPorts
-      ? (I18n.t('notes.portsPlaceholder') || 'PORT  PROJECT  DOMAIN  —  e.g. 330  Jewel  jewel.example.com')
-      : (I18n.t('notes.dailyPlaceholder') || '今天做了什么…');
     const emptyKey = isPorts ? 'notes.emptyPorts' : 'notes.emptyDaily';
     const emptyText = I18n.t(emptyKey) || (isPorts ? '暂无端口条目' : '暂无日常条目');
 
-    const list = entries.length
-      ? `<ul class="note-entry-list">${entries.map((e, i) => `
-          <li class="note-entry" data-index="${i}">
-            <div class="note-entry-content">${esc(e.content)}</div>
-            <div class="note-entry-meta">
-              ${e.createdAt ? `<small>${esc(formatDateShort(new Date(e.createdAt)))}</small>` : ''}
-              <button class="note-entry-del" data-index="${i}" title="${I18n.t('notes.deleteEntry') || '删除'}">×</button>
-            </div>
-          </li>
-        `).join('')}</ul>`
-      : `<div class="empty-state" style="padding:14px"><p style="color:var(--text-muted);font-size:13px">${esc(emptyText)}</p></div>`;
+    const body = entries.length
+      ? `<ul class="note-entry-list ${isPorts ? 'note-entry-list-ports' : 'note-entry-list-daily'}">
+          ${entries.map((e, i) => isPorts ? this.renderPortEntry(e, i) : this.renderDailyEntry(e, i)).join('')}
+        </ul>`
+      : `<div class="note-empty"><p>${esc(emptyText)}</p></div>`;
 
     el.innerHTML = `
-      ${list}
-      <div class="note-add-form">
-        <textarea class="note-add-input" id="noteAddInput" rows="${isPorts ? 1 : 2}" placeholder="${esc(placeholder)}"></textarea>
-        <button class="btn btn-sm" id="noteAddBtn" data-i18n="notes.addEntry">添加</button>
-      </div>
+      <div class="note-body">${body}</div>
+      ${isPorts ? this.renderPortAddForm() : this.renderDailyAddForm()}
     `;
 
-    // Wire up delete buttons
     el.querySelectorAll('.note-entry-del').forEach(btn => {
       btn.addEventListener('click', () => this.deleteEntry(key, parseInt(btn.dataset.index, 10)));
     });
 
-    // Wire up add button
-    const input = document.getElementById('noteAddInput');
+    this.wireAddForm(key);
+  },
+
+  renderPortEntry(e, i) {
+    return `
+      <li class="note-entry note-entry-ports" data-index="${i}">
+        <div class="note-col note-col-port">${esc(e.port || '—')}</div>
+        <div class="note-col note-col-app">${esc(e.app || '—')}</div>
+        <div class="note-col note-col-note">${esc(e.note || '—')}</div>
+        <div class="note-entry-actions">
+          ${e.createdAt ? `<small class="note-entry-time" title="${esc(formatDateShort(new Date(e.createdAt)))}">${esc(formatDateShort(new Date(e.createdAt)))}</small>` : ''}
+          <button class="note-entry-del" data-index="${i}" title="${I18n.t('notes.deleteEntry') || '删除'}">×</button>
+        </div>
+      </li>
+    `;
+  },
+
+  renderDailyEntry(e, i) {
+    return `
+      <li class="note-entry note-entry-daily" data-index="${i}">
+        <div class="note-col note-col-content">${esc(e.content || '')}</div>
+        <div class="note-entry-actions">
+          ${e.createdAt ? `<small class="note-entry-time">${esc(formatDateShort(new Date(e.createdAt)))}</small>` : ''}
+          <button class="note-entry-del" data-index="${i}" title="${I18n.t('notes.deleteEntry') || '删除'}">×</button>
+        </div>
+      </li>
+    `;
+  },
+
+  renderPortAddForm() {
+    return `
+      <div class="note-add-form note-add-form-ports">
+        <input type="text" class="note-add-input note-add-port" id="noteAddPort" maxlength="6"
+               placeholder="${esc(I18n.t('notes.portPlaceholder') || '端口')}" />
+        <input type="text" class="note-add-input note-add-app" id="noteAddApp"
+               placeholder="${esc(I18n.t('notes.appPlaceholder') || '应用名')}" />
+        <input type="text" class="note-add-input note-add-note" id="noteAddNote"
+               placeholder="${esc(I18n.t('notes.notePlaceholder') || '备注')}" />
+        <button class="btn btn-sm" id="noteAddBtn" data-i18n="notes.addEntry">添加</button>
+      </div>
+    `;
+  },
+
+  renderDailyAddForm() {
+    return `
+      <div class="note-add-form note-add-form-daily">
+        <textarea class="note-add-input" id="noteAddInput" rows="2"
+                  placeholder="${esc(I18n.t('notes.dailyPlaceholder') || '今天做了什么…')}"></textarea>
+        <button class="btn btn-sm" id="noteAddBtn" data-i18n="notes.addEntry">添加</button>
+      </div>
+    `;
+  },
+
+  wireAddForm(key) {
     const addBtn = document.getElementById('noteAddBtn');
-    const doAdd = () => this.addEntry(key);
-    addBtn.addEventListener('click', doAdd);
-    // Ctrl+Enter / Cmd+Enter submits, Enter alone (single-line) submits for ports only
-    input.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey || (!ev.shiftKey && isPorts))) {
-        ev.preventDefault();
-        doAdd();
-      }
-    });
+    if (!addBtn) return;
+    addBtn.addEventListener('click', () => this.addEntry(key));
+
+    if (key === 'ports') {
+      const portEl = document.getElementById('noteAddPort');
+      const appEl = document.getElementById('noteAddApp');
+      const noteEl = document.getElementById('noteAddNote');
+      // Tab order is natural; Enter from any field submits.
+      [portEl, appEl, noteEl].forEach(el => {
+        el?.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') { ev.preventDefault(); this.addEntry(key); }
+        });
+      });
+    } else {
+      const input = document.getElementById('noteAddInput');
+      input?.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+          ev.preventDefault();
+          this.addEntry(key);
+        }
+      });
+    }
   },
 
   async addEntry(key) {
+    if (key === 'ports') {
+      const portEl = document.getElementById('noteAddPort');
+      const appEl = document.getElementById('noteAddApp');
+      const noteEl = document.getElementById('noteAddNote');
+      if (!portEl || !appEl) return;
+      const port = (portEl.value || '').trim();
+      const app = (appEl.value || '').trim();
+      const note = (noteEl ? noteEl.value : '').trim();
+      if (!port && !app && !note) {
+        portEl.focus();
+        return;
+      }
+      const entries = this.getNoteEntries(key).slice();
+      entries.unshift({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        port, app, note,
+        createdAt: new Date().toISOString()
+      });
+      await this.persistEntries(key, entries);
+      this.renderEntryList(key);
+      return;
+    }
+
     const input = document.getElementById('noteAddInput');
     if (!input) return;
     const val = input.value.trim();
-    if (!val) {
-      input.focus();
-      return;
-    }
+    if (!val) { input.focus(); return; }
     const entries = this.getNoteEntries(key).slice();
     entries.unshift({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

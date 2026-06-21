@@ -489,11 +489,57 @@ async function getContainerUsageByImage(all = true) {
 }
 
 async function pruneImages() {
-  const d = getDocker();
-  // Prune only "dangling" filter is too aggressive (skips any image with a tag,
-  // even if no container is using it). Use {dangling: false, label: ''} by
-  // passing filters: [] which Docker API treats as "all unused".
-  return d.pruneImages({ filters: { dangling: { false: true } } });
+  // Use the Docker CLI directly: `docker image prune -a -f` removes ALL
+  // unused images (both dangling and tagged-but-unreferenced) without
+  // prompting. The Docker Engine API filter format
+  // (`{"dangling":["false"]}` as a query param) is finicky to get right
+  // through dockerode, and the wrong shape silently degrades to
+  // dangling-only, which reports 0 deletions when all images are tagged.
+  // Using the CLI is simpler and matches what the user actually expects.
+  try {
+    const { stdout } = await execAsync('docker image prune -a -f', {
+      timeout: 300000,
+      maxBuffer: 10 * 1024 * 1024
+    });
+    return parsePruneOutput(stdout || '');
+  } catch (err) {
+    // `docker image prune` exits with a non-zero status when there's
+    // nothing to prune (in some Docker versions). If we can still parse
+    // a 0-count out of the message, treat it as success; otherwise
+    // re-throw.
+    const out = (err && err.stdout && err.stdout.toString()) || '';
+    if (out) {
+      const parsed = parsePruneOutput(out);
+      if (parsed.deleted >= 0) return parsed;
+    }
+    throw err;
+  }
+}
+
+function parsePruneOutput(stdout) {
+  // Docker CLI output looks like:
+  //   Deleted Images:
+  //   untagged: alpine:latest
+  //   deleted: sha256:e7d88de73db3d3fd9b2d63aa7b447f8ddee1df756afcfe7d0e6c5127d1bb2d24
+  //   ...
+  //   Total reclaimed space: 7.794MB
+  // We must NOT count `untagged: ...@sha256:...` lines as deletions
+  // (their sha256 part is a digest, not a deletion marker). Only count
+  // lines that look like `deleted: sha256:<64 hex>`.
+  let reclaimed = 0;
+  const reclaimedMatch = stdout.match(/Total Reclaimed Space:\s*([0-9.]+)\s*([A-Za-z]+)/i);
+  if (reclaimedMatch) {
+    reclaimed = sizeToBytes(parseFloat(reclaimedMatch[1]), reclaimedMatch[2]);
+  }
+  const idLines = stdout.split('\n').filter(l => /\bdeleted:\s*sha256:[0-9a-f]{64}/.test(l));
+  const deleted = idLines.length;
+  return { SpaceReclaimed: reclaimed, ImagesDeleted: idLines, deleted, output: stdout };
+}
+
+function sizeToBytes(value, unit) {
+  const u = (unit || '').toUpperCase();
+  const multipliers = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+  return Math.round((value || 0) * (multipliers[u] || 1));
 }
 
 module.exports = {

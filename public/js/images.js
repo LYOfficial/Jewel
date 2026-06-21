@@ -42,16 +42,19 @@ const Images = {
   renderTable() {
     const el = document.getElementById('imagesList');
     const summary = document.getElementById('imagesSummary');
-    const totals = this.data.totals || { count: 0, inUseCount: 0, unusedCount: 0, totalSize: 0, unusedSize: 0 };
+    const totals = this.data.totals || { count: 0, inUseCount: 0, unusedCount: 0, buildCacheCount: 0, totalSize: 0, unusedSize: 0 };
 
     if (summary) {
+      const buildCacheCount = totals.buildCacheCount || 0;
+      const unusedOnly = Math.max(0, (totals.unusedCount || 0) - buildCacheCount);
       summary.textContent = I18n.t('images.summary')
         ? I18n.t('images.summary')
             .replace('{total}', totals.count)
             .replace('{inUse}', totals.inUseCount)
-            .replace('{unused}', totals.unusedCount)
+            .replace('{unused}', unusedOnly)
+            .replace('{buildCache}', buildCacheCount)
             .replace('{unusedSize}', formatBytes(totals.unusedSize || 0))
-        : `共 ${totals.count} 个，${totals.inUseCount} 个使用中，${totals.unusedCount} 个未使用（${formatBytes(totals.unusedSize || 0)}）`;
+        : `共 ${totals.count} 个，${totals.inUseCount} 个使用中，${buildCacheCount} 个构建缓存，${unusedOnly} 个未使用（${formatBytes(totals.unusedSize || 0)}）`;
     }
 
     if (!this.data.images || this.data.images.length === 0) {
@@ -90,13 +93,15 @@ const Images = {
       const cName = (c.Names && c.Names[0] || c.Id.substring(0, 12)).replace(/^\//, '');
       const more = img.containers.length > 1 ? ` <span class="text-muted">+${img.containers.length - 1}</span>` : '';
       usageBadge = `<span class="badge badge-running">${I18n.t('images.inUse') || '使用中'}</span> <span style="color:var(--text-secondary);font-size:12px">${esc(cName)}${more}</span>`;
+    } else if (img.is_build_cache) {
+      const hint = I18n.t('images.buildCacheHint') || '构建缓存';
+      usageBadge = `<span class="badge badge-cache" title="${esc(hint)}">${I18n.t('images.buildCache') || '构建缓存'}</span>`;
     } else {
       usageBadge = `<span class="badge badge-stopped">${I18n.t('images.unused') || '未使用'}</span>`;
     }
 
     const removeLabel = I18n.t('images.remove') || '删除';
     const detailLabel = I18n.t('images.detail') || '详情';
-    const forceLabel = I18n.t('images.forceRemove') || '强制删除';
 
     return `
       <tr>
@@ -107,12 +112,12 @@ const Images = {
         <td>${usageBadge}</td>
         <td class="action-cell">
           <button class="btn btn-sm" onclick="Images.showDetail('${img.Id}')">${detailLabel}</button>
-          <button class="btn btn-sm btn-danger" onclick="Images.confirmRemove('${img.Id}', ${img.in_use})">${removeLabel}</button>
+          <button class="btn btn-sm btn-danger" onclick="Images.confirmRemove('${img.Id}', ${img.in_use}, ${!!img.is_build_cache})">${removeLabel}</button>
         </td>
       </tr>`;
   },
 
-  async confirmRemove(id, inUse) {
+  async confirmRemove(id, inUse, isBuildCache) {
     const img = this.data.images.find(i => i.Id === id);
     if (!img) return;
 
@@ -145,6 +150,27 @@ const Images = {
           onClick: () => this.removeImage(id, { force: true })
         }
       ];
+    } else if (isBuildCache) {
+      // Build cache intermediate: this image is a parent of other images
+      // and cannot be deleted directly — `docker rm` returns 409
+      // "image has dependent child images". Direct the user to prune.
+      content = `
+        <div class="rm-info">
+          <div class="rm-row"><span class="rm-label">${I18n.t('images.image') || '镜像'}</span><span class="rm-value">${esc(displayName)}</span></div>
+          <div class="rm-row"><span class="rm-label">${I18n.t('images.size') || '大小'}</span><span class="rm-value">${formatBytes(img.Size || 0)}</span></div>
+        </div>
+        <p style="color:#5af;font-size:13px;line-height:1.6;margin-bottom:12px" data-i18n="images.buildCacheNote">
+          此镜像是 Docker 构建缓存的中间层，被其他镜像作为父层引用，无法单独删除。请使用「一键清理未使用」来一并清理。
+        </p>
+      `;
+      actions = [
+        { label: I18n.t('common.cancel') || '取消', class: 'btn-secondary' },
+        {
+          label: I18n.t('images.pruneAll') || '一键清理未使用',
+          class: 'btn-danger',
+          onClick: () => this.confirmPrune()
+        }
+      ];
     } else {
       content = `
         <div class="rm-info">
@@ -174,30 +200,43 @@ const Images = {
       Notify.success(I18n.t('images.removed') || '镜像已删除');
       await this.loadList();
     } catch (err) {
+      // `API.request` parses JSON error responses and throws
+      // `new Error(data.error)` — but `data.hint` is dropped. Reach into
+      // the raw error message: if the server flagged HAS_CHILD_IMAGES,
+      // the modal already gave the right guidance, so a brief toast here
+      // is sufficient. Otherwise just show the raw message.
       Notify.error(err.message);
     }
   },
 
   async confirmPrune() {
     const totals = this.data.totals || {};
-    const unused = totals.unusedCount || 0;
+    const buildCacheCount = totals.buildCacheCount || 0;
+    const unusedOnly = Math.max(0, (totals.unusedCount || 0) - buildCacheCount);
+    const totalPruneable = unusedOnly + buildCacheCount;
     const unusedSize = totals.unusedSize || 0;
 
-    if (unused === 0) {
+    if (totalPruneable === 0) {
       Notify.info(I18n.t('images.nothingToPrune') || '没有可清理的未使用镜像');
       return;
     }
+
+    // Build the per-row breakdown. We always show the build-cache row
+    // (even when 0) so the user understands the operation covers both
+    // "truly unused" and "build cache" images.
+    const rows = [
+      `<div class="rm-row"><span class="rm-label">${I18n.t('images.unusedCount') || '未使用镜像'}</span><span class="rm-value">${unusedOnly} 个</span></div>`,
+      `<div class="rm-row"><span class="rm-label">${I18n.t('images.buildCache') || '构建缓存'}</span><span class="rm-value">${buildCacheCount} 个</span></div>`,
+      `<div class="rm-row"><span class="rm-label">${I18n.t('images.unusedSize') || '可释放空间'}</span><span class="rm-value">${formatBytes(unusedSize)}</span></div>`
+    ].join('');
 
     const content = `
       <div class="rm-warn" style="font-size:14px;margin-bottom:12px">
         <strong data-i18n="images.pruneWarnTitle">⚠ 即将清理所有未使用镜像</strong>
       </div>
-      <div class="rm-info">
-        <div class="rm-row"><span class="rm-label">${I18n.t('images.unusedCount') || '未使用镜像'}</span><span class="rm-value">${unused} 个</span></div>
-        <div class="rm-row"><span class="rm-label">${I18n.t('images.unusedSize') || '可释放空间'}</span><span class="rm-value">${formatBytes(unusedSize)}</span></div>
-      </div>
+      <div class="rm-info">${rows}</div>
       <p style="color:#ccc;font-size:13px;line-height:1.6;margin-bottom:12px" data-i18n="images.pruneWarnBody">
-        将删除所有未被任何容器使用的镜像。此操作不可撤销，但不影响正在运行的容器。
+        将删除所有未被任何容器使用的镜像（包括 Docker 构建缓存的中间层）。此操作不可撤销，但不影响正在运行的容器。
       </p>
       <p class="rm-warn" data-i18n="images.pruneFinal">请确认是否继续？</p>
     `;
@@ -217,9 +256,12 @@ const Images = {
     try {
       Notify.info(I18n.t('images.pruning') || '正在清理未使用镜像...');
       const result = await API.pruneImages();
-      // Our backend now returns { SpaceReclaimed, ImagesDeleted, deleted, output }
-      // regardless of whether the call exited 0 or not (it can exit non-zero
-      // with "0 deleted" if there's nothing to prune on some Docker versions).
+      // Backend now runs BOTH `docker image prune -a -f` AND
+      // `docker builder prune -a -f` and returns the combined totals as
+      // { deleted, SpaceReclaimed, imagesDeleted, imagesReclaimed,
+      //   builderDeleted, builderReclaimed }. The combined `deleted` and
+      // `SpaceReclaimed` cover both phases so the user sees a single
+      // "freed X / reclaimed Y" line that includes build-cache cleanups.
       const reclaimed = (result && (result.SpaceReclaimed || 0)) || 0;
       const deleted = (result && (
         typeof result.deleted === 'number'

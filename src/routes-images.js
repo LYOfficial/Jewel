@@ -15,19 +15,23 @@ router.use(authMiddleware);
 router.get('/', async (req, res) => {
   try {
     const all = req.query.all !== 'false';
-    const [images, usage] = await Promise.all([
+    const [images, usage, buildCache] = await Promise.all([
       dockerService.listImages(all),
-      dockerService.getContainerUsageByImage(all)
+      dockerService.getContainerUsageByImage(all),
+      dockerService.getBuildCacheByImage(all)
     ]);
 
     const decorated = images.map(img => {
       const id = img.Id;
       const containers = usage[id] || [];
+      const childCount = buildCache[id] || 0;
       const shortId = id ? id.replace(/^sha256:/, '').substring(0, 12) : '';
       return {
         ...img,
         shortId,
         in_use: containers.length > 0,
+        is_build_cache: childCount > 0,
+        child_count: childCount,
         containers
       };
     });
@@ -39,6 +43,7 @@ router.get('/', async (req, res) => {
 
     const totalSize = decorated.reduce((s, i) => s + (i.Size || 0), 0);
     const inUseSize = decorated.filter(i => i.in_use).reduce((s, i) => s + (i.Size || 0), 0);
+    const buildCacheCount = decorated.filter(i => !i.in_use && i.is_build_cache).length;
 
     res.json({
       images: decorated,
@@ -46,6 +51,7 @@ router.get('/', async (req, res) => {
         count: decorated.length,
         inUseCount: decorated.filter(i => i.in_use).length,
         unusedCount: decorated.filter(i => !i.in_use).length,
+        buildCacheCount,
         totalSize,
         inUseSize,
         unusedSize: totalSize - inUseSize
@@ -81,7 +87,18 @@ router.delete('/:id', async (req, res) => {
     const result = await dockerService.removeImage(req.params.id, { force, noprune });
     res.json({ message: 'Image removed', result });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Docker returns 409 "image has dependent child images" when the
+    // user tries to remove a build-cache intermediate. Surface a clean,
+    // actionable error instead of leaking the raw Docker message.
+    const raw = (err && err.message) || '';
+    if (/dependent child images|cannot be forced/i.test(raw)) {
+      return res.status(409).json({
+        error: 'image has dependent child images',
+        hint: 'This image is a Docker build-cache intermediate. Use "Prune Unused" to clean it as part of the build cache.',
+        code: 'HAS_CHILD_IMAGES'
+      });
+    }
+    res.status(500).json({ error: raw || 'remove failed' });
   }
 });
 

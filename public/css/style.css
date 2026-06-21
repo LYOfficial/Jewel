@@ -841,6 +841,7 @@ tr:hover { background: var(--bg-hover); }
 .badge-ready { background: rgba(68,204,68,0.1); color: var(--success); }
 .badge-cloning { background: rgba(255,170,0,0.15); color: var(--warning); }
 .badge-update { background: rgba(255,170,0,0.15); color: var(--warning); margin-left: 6px; font-size: 11px; }
+.badge-cache { background: rgba(90,170,255,0.15); color: #5af; }
 
 /* ====== Commit & Update ====== */
 .commit-sha { font-family: 'Courier New', monospace; font-size: 12px; color: var(--text-secondary); }

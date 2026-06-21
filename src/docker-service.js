@@ -488,31 +488,105 @@ async function getContainerUsageByImage(all = true) {
   return byImage;
 }
 
-async function pruneImages() {
-  // Use the Docker CLI directly: `docker image prune -a -f` removes ALL
-  // unused images (both dangling and tagged-but-unreferenced) without
-  // prompting. The Docker Engine API filter format
-  // (`{"dangling":["false"]}` as a query param) is finicky to get right
-  // through dockerode, and the wrong shape silently degrades to
-  // dangling-only, which reports 0 deletions when all images are tagged.
-  // Using the CLI is simpler and matches what the user actually expects.
+// Return a map of parentImageId -> number of direct child images.
+// An image with a non-zero child count is part of the Docker build cache:
+// even though no container references it as its ImageID, it is still in
+// use as a parent layer of other images and therefore `docker image
+// prune -a` will not delete it (the user sees this as "0 deleted" while
+// the UI still lists it as unused). `docker builder prune -a -f` is what
+// actually removes these.
+//
+// Implementation note: `dockerode.listImages` does not include ParentId
+// in the basic listing, so we have to inspect every image individually.
+// This is O(n) inspect calls — acceptable for the typical Jewel use case
+// (a few dozen images) and keeps us from depending on the docker buildx
+// or engine v1.40+ history APIs.
+async function getBuildCacheByImage(all = true) {
+  const d = getDocker();
+  let images;
   try {
-    const { stdout } = await execAsync('docker image prune -a -f', {
+    images = await d.listImages({ all });
+  } catch {
+    return {};
+  }
+
+  const childCounts = {};
+  await Promise.all(images.map(async (img) => {
+    if (!img.Id) return;
+    try {
+      const info = await d.getImage(img.Id).inspect();
+      const parentId = info && info.ParentId;
+      if (parentId && parentId !== 'sha256:' + '0'.repeat(64) /* no parent */) {
+        childCounts[parentId] = (childCounts[parentId] || 0) + 1;
+      }
+    } catch {
+      // Inspect can fail for images that vanish between list and inspect;
+      // skip them rather than aborting the whole listing.
+    }
+  }));
+
+  return childCounts;
+}
+
+async function pruneImages() {
+  // Two-phase cleanup:
+  //   1. `docker image prune -a -f` removes unused images (tagged or
+  //      dangling) that aren't referenced as a parent by any other image.
+  //   2. `docker builder prune -a -f` removes the build cache, including
+  //      intermediate layers that ARE parents of other images. These show
+  //      up in `docker image ls -a` as `<none>:<none>` and the user thinks
+  //      they should be prunable, but `image prune -a` silently skips them
+  //      because they're parents — that is exactly the case where we must
+  //      fall back to `builder prune`.
+  //
+  // We run both unconditionally and combine the results so the user sees
+  // a single "freed X / reclaimed Y" number.
+  //
+  // The Docker CLI is used directly (instead of dockerode filters) because
+  // the Engine API filter shape `{"dangling":["false"]}` is finicky to send
+  // through dockerode, and the wrong shape silently degrades to
+  // dangling-only — which is the original bug we're fixing here.
+  const imageOut = await runPruneCmd('docker image prune -a -f');
+  const builderOut = await runPruneCmd('docker builder prune -a -f');
+
+  const totalDeleted = (imageOut.deleted || 0) + (builderOut.deleted || 0);
+  const totalReclaimed = (imageOut.SpaceReclaimed || 0) + (builderOut.SpaceReclaimed || 0);
+
+  return {
+    imagesDeleted: imageOut.deleted || 0,
+    imagesReclaimed: imageOut.SpaceReclaimed || 0,
+    builderDeleted: builderOut.deleted || 0,
+    builderReclaimed: builderOut.SpaceReclaimed || 0,
+    deleted: totalDeleted,
+    SpaceReclaimed: totalReclaimed,
+    output: [
+      '--- docker image prune -a -f ---',
+      imageOut.output || '',
+      '--- docker builder prune -a -f ---',
+      builderOut.output || ''
+    ].join('\n')
+  };
+}
+
+// Run one prune command. Treat exit-non-zero with parseable output as
+// success (some Docker versions exit non-zero when there's nothing to
+// prune).
+async function runPruneCmd(cmd) {
+  try {
+    const { stdout } = await execAsync(cmd, {
       timeout: 300000,
       maxBuffer: 10 * 1024 * 1024
     });
     return parsePruneOutput(stdout || '');
   } catch (err) {
-    // `docker image prune` exits with a non-zero status when there's
-    // nothing to prune (in some Docker versions). If we can still parse
-    // a 0-count out of the message, treat it as success; otherwise
-    // re-throw.
     const out = (err && err.stdout && err.stdout.toString()) || '';
     if (out) {
       const parsed = parsePruneOutput(out);
       if (parsed.deleted >= 0) return parsed;
     }
-    throw err;
+    // Surface a useful error to the caller
+    const stderr = (err && err.stderr && err.stderr.toString()) || '';
+    throw new Error((stderr || err.message || 'prune failed').trim());
   }
 }
 
@@ -570,5 +644,6 @@ module.exports = {
   getImageHistory,
   removeImage,
   getContainerUsageByImage,
+  getBuildCacheByImage,
   pruneImages
 };

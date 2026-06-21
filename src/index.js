@@ -8,6 +8,7 @@ const projectUpdateService = require('./project-update-service');
 const routesAuth = require('./routes-auth');
 const routesProjects = require('./routes-projects');
 const routesContainers = require('./routes-containers');
+const routesImages = require('./routes-images');
 const routesGit = require('./routes-git');
 const routesSystem = require('./routes-system');
 const routesTokens = require('./routes-tokens');
@@ -28,11 +29,13 @@ app.use((req, res, next) => {
 
 app.use('/api/auth', routesAuth);
 app.use('/api/projects', routesProjects);
+// Mount images router BEFORE containers so that /api/containers/images
+// doesn't get caught by containers' /:id wildcard.
+app.use('/api/containers/images', routesImages);
 app.use('/api/containers', routesContainers);
 app.use('/api/git', routesGit);
 app.use('/api/system', routesSystem);
 app.use('/api/tokens', routesTokens);
-// Note: /api/images routes are mounted in routes-containers.js to keep them grouped with container ops
 
 // Fallback error handler — ensure API errors return JSON, not HTML
 app.use((err, req, res, next) => {

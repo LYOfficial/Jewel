@@ -184,12 +184,46 @@ const Dashboard = {
 
   // ===== Notes =====
   currentNote: 'public',
-  notesData: { public: '', ports: '', daily: '' },
+  // For 'public': string. For 'ports' / 'daily': array of {id, content, createdAt}.
+  notesData: { public: '', ports: [], daily: [] },
+
+  // Decoded helper — the backend stores each note as a raw string, so older
+  // "ports" / "daily" values may still be a multi-line string instead of a
+  // JSON array. Treat both as a list of entries.
+  getNoteEntries(key) {
+    const raw = this.notesData[key];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string' && raw.trim()) {
+      // Try JSON first
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      } catch { /* fall through */ }
+      // Fall back: split on newline and treat each non-empty line as an entry
+      return raw.split('\n')
+        .filter(l => l.trim())
+        .map((line, i) => ({ id: `legacy-${Date.now()}-${i}`, content: line, createdAt: null }));
+    }
+    return [];
+  },
+
+  // Persist a normalized list back to the backend as a JSON string.
+  async persistEntries(key, entries) {
+    this.notesData[key] = entries;
+    try {
+      await API.updateNotes({ [key]: JSON.stringify(entries) });
+    } catch (err) {
+      Notify.error(err.message);
+    }
+  },
 
   async loadNotes() {
     try {
       this.notesData = await API.getNotes();
     } catch { /* ignore */ }
+    // Normalize once on load so the rest of the code can trust the shape.
+    this.notesData.ports = this.getNoteEntries('ports');
+    this.notesData.daily = this.getNoteEntries('daily');
     this.renderNoteTab();
   },
 
@@ -211,20 +245,96 @@ const Dashboard = {
       return;
     }
 
-    const key = this.currentNote;
-    const val = this.notesData[key] || '';
-    const placeholder = key === 'ports'
-      ? 'PORT  PROJECT  DOMAIN\n330   Jewel    jewel.example.com\n8080  MyApp    app.example.com'
-      : key === 'daily'
-        ? '2026-01-01  Did something...\n2026-01-02  Todo: fix bug'
-        : '';
+    // 'public' keeps the original single-textarea editor.
+    if (this.currentNote === 'public') {
+      const val = this.notesData.public || '';
+      el.innerHTML = `<textarea class="note-editor" id="noteEditor" placeholder="${I18n.t('notes.publicPlaceholder') || ''}">${esc(val)}</textarea>
+        <div class="note-actions">
+          <button class="btn btn-sm" id="saveNoteBtn" data-i18n="common.save">保存</button>
+        </div>`;
+      document.getElementById('saveNoteBtn')?.addEventListener('click', () => this.saveCurrentNote());
+      return;
+    }
 
-    el.innerHTML = `<textarea class="note-editor" id="noteEditor" placeholder="${placeholder}">${esc(val)}</textarea>
-      <div class="note-actions">
-        <button class="btn btn-sm" id="saveNoteBtn" data-i18n="common.save">保存</button>
-      </div>`;
+    // 'ports' and 'daily' use a multi-entry notepad.
+    this.renderEntryList(this.currentNote);
+  },
 
-    document.getElementById('saveNoteBtn')?.addEventListener('click', () => this.saveCurrentNote());
+  renderEntryList(key) {
+    const el = document.getElementById('notebookContent');
+    if (!el) return;
+
+    const entries = this.getNoteEntries(key);
+    const isPorts = key === 'ports';
+    const placeholder = isPorts
+      ? (I18n.t('notes.portsPlaceholder') || 'PORT  PROJECT  DOMAIN  —  e.g. 330  Jewel  jewel.example.com')
+      : (I18n.t('notes.dailyPlaceholder') || '今天做了什么…');
+    const emptyKey = isPorts ? 'notes.emptyPorts' : 'notes.emptyDaily';
+    const emptyText = I18n.t(emptyKey) || (isPorts ? '暂无端口条目' : '暂无日常条目');
+
+    const list = entries.length
+      ? `<ul class="note-entry-list">${entries.map((e, i) => `
+          <li class="note-entry" data-index="${i}">
+            <div class="note-entry-content">${esc(e.content)}</div>
+            <div class="note-entry-meta">
+              ${e.createdAt ? `<small>${esc(formatDateShort(new Date(e.createdAt)))}</small>` : ''}
+              <button class="note-entry-del" data-index="${i}" title="${I18n.t('notes.deleteEntry') || '删除'}">×</button>
+            </div>
+          </li>
+        `).join('')}</ul>`
+      : `<div class="empty-state" style="padding:14px"><p style="color:var(--text-muted);font-size:13px">${esc(emptyText)}</p></div>`;
+
+    el.innerHTML = `
+      ${list}
+      <div class="note-add-form">
+        <textarea class="note-add-input" id="noteAddInput" rows="${isPorts ? 1 : 2}" placeholder="${esc(placeholder)}"></textarea>
+        <button class="btn btn-sm" id="noteAddBtn" data-i18n="notes.addEntry">添加</button>
+      </div>
+    `;
+
+    // Wire up delete buttons
+    el.querySelectorAll('.note-entry-del').forEach(btn => {
+      btn.addEventListener('click', () => this.deleteEntry(key, parseInt(btn.dataset.index, 10)));
+    });
+
+    // Wire up add button
+    const input = document.getElementById('noteAddInput');
+    const addBtn = document.getElementById('noteAddBtn');
+    const doAdd = () => this.addEntry(key);
+    addBtn.addEventListener('click', doAdd);
+    // Ctrl+Enter / Cmd+Enter submits, Enter alone (single-line) submits for ports only
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey || (!ev.shiftKey && isPorts))) {
+        ev.preventDefault();
+        doAdd();
+      }
+    });
+  },
+
+  async addEntry(key) {
+    const input = document.getElementById('noteAddInput');
+    if (!input) return;
+    const val = input.value.trim();
+    if (!val) {
+      input.focus();
+      return;
+    }
+    const entries = this.getNoteEntries(key).slice();
+    entries.unshift({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      content: val,
+      createdAt: new Date().toISOString()
+    });
+    await this.persistEntries(key, entries);
+    this.renderEntryList(key);
+  },
+
+  async deleteEntry(key, index) {
+    const entries = this.getNoteEntries(key).slice();
+    if (index < 0 || index >= entries.length) return;
+    entries.splice(index, 1);
+    await this.persistEntries(key, entries);
+    this.renderEntryList(key);
   },
 
   renderCalendar() {
@@ -308,4 +418,10 @@ function formatUptime(seconds) {
   if (d > 0) return d + 'd ' + h + 'h';
   if (h > 0) return h + 'h ' + m + 'm';
   return m + 'm';
+}
+
+function formatDateShort(d) {
+  if (!d || isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

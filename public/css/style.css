@@ -403,6 +403,89 @@ textarea { resize: vertical; min-height: 80px; }
   margin-top: 8px;
 }
 
+/* Multi-entry notepad (ports / daily) */
+.note-entry-list {
+  list-style: none;
+  margin: 0 0 10px 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.note-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  margin-bottom: 6px;
+  transition: border-color 0.15s;
+}
+.note-entry:hover { border-color: var(--text-muted); }
+.note-entry-content {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+.note-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.note-entry-meta small { font-size: 11px; }
+.note-entry-del {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.15s;
+}
+.note-entry-del:hover {
+  background: #c33;
+  color: #fff;
+  border-color: #c33;
+}
+.note-add-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-color);
+}
+.note-add-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  outline: none;
+  resize: vertical;
+}
+.note-add-input:focus { border-color: var(--border-focus); }
+.note-add-form .btn { flex-shrink: 0; }
+
 /* Calendar */
 .calendar { padding: 4px; }
 .cal-header {

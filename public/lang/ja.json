@@ -248,6 +248,10 @@
   "images.buildCache": "ビルドキャッシュ",
   "images.buildCacheHint": "このイメージは Docker ビルドキャッシュの中間層で、他のイメージの親レイヤーとして参照されています",
   "images.buildCacheNote": "このイメージは Docker ビルドキャッシュの中間層で、他のイメージの親レイヤーとして参照されているため、単独では削除できません。「未使用を一括削除」を使用してビルドキャッシュと一緒にクリーンアップしてください。",
+  "images.hiddenHint": "（{n} 個のビルドキャッシュ中間層を非表示）",
+  "images.showHidden": "非表示を表示（{n}）",
+  "images.hideHidden": "ビルドキャッシュを非表示",
+  "images.allHidden": "すべてのイメージがビルドキャッシュ中間層のため非表示になっています。「未使用を一括削除」をクリックしてクリーンアップしてください。",
   "images.nothingToPrune": "削除対象の未使用イメージはありません",
   "images.pruning": "未使用イメージを削除中...",
   "images.pruned": "{n} 個の未使用イメージを削除し、{size} を解放しました"

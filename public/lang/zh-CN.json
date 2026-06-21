@@ -248,6 +248,10 @@
   "images.buildCache": "构建缓存",
   "images.buildCacheHint": "此镜像是 Docker 构建缓存的中间层，被其他镜像作为父层引用",
   "images.buildCacheNote": "此镜像是 Docker 构建缓存的中间层，被其他镜像作为父层引用，无法单独删除。请使用「一键清理未使用」来一并清理。",
+  "images.hiddenHint": "（已隐藏 {n} 个构建缓存中间层）",
+  "images.showHidden": "显示已隐藏（{n}）",
+  "images.hideHidden": "隐藏构建缓存",
+  "images.allHidden": "所有镜像都是构建缓存中间层，已隐藏。请点击「一键清理未使用」清理。",
   "images.nothingToPrune": "没有可清理的未使用镜像",
   "images.pruning": "正在清理未使用镜像...",
   "images.pruned": "已清理 {n} 个未使用镜像，释放 {size}"

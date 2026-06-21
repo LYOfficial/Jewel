@@ -44,14 +44,32 @@ router.get('/', async (req, res) => {
     const totalSize = decorated.reduce((s, i) => s + (i.Size || 0), 0);
     const inUseSize = decorated.filter(i => i.in_use).reduce((s, i) => s + (i.Size || 0), 0);
     const buildCacheCount = decorated.filter(i => !i.in_use && i.is_build_cache).length;
+    const buildCacheSize = decorated.filter(i => !i.in_use && i.is_build_cache).reduce((s, i) => s + (i.Size || 0), 0);
+
+    // Hide pure build-cache intermediates from the default list. These are
+    // untagged parents of other images — they cannot be deleted one-by-one
+    // (Docker returns 409 "dependent child images"), they're never useful to
+    // the user as standalone entries, and they accumulate quickly during
+    // iterative `docker build` cycles. The user only needs to see them in
+    // the totals and clean them via "Prune Unused" → builder prune.
+    //
+    // Query opt-out: `?all=true` returns the unfiltered list so /history,
+    // /:id and the detail modal keep working for these images.
+    const showAll = req.query.show_all === 'true';
+    const visibleImages = showAll
+      ? decorated
+      : decorated.filter(img => img.in_use || !img.is_build_cache);
 
     res.json({
-      images: decorated,
+      images: visibleImages,
       totals: {
         count: decorated.length,
         inUseCount: decorated.filter(i => i.in_use).length,
         unusedCount: decorated.filter(i => !i.in_use).length,
         buildCacheCount,
+        buildCacheSize,
+        visibleCount: visibleImages.length,
+        hiddenCount: decorated.length - visibleImages.length,
         totalSize,
         inUseSize,
         unusedSize: totalSize - inUseSize

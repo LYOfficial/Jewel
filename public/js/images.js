@@ -9,6 +9,7 @@ const Images = {
           <div class="card-title" data-i18n="images.list">镜像列表</div>
           <div class="topbar-actions">
             <span id="imagesSummary" style="color:var(--text-muted);font-size:12px"></span>
+            <button class="btn btn-sm" id="toggleHiddenBtn" style="display:none" data-i18n="images.showHidden">显示已隐藏</button>
             <button class="btn btn-sm" id="refreshImages" data-i18n="common.refresh">刷新</button>
             <button class="btn btn-sm btn-danger" id="pruneImagesBtn" data-i18n="images.pruneAll">一键删除未使用</button>
           </div>
@@ -20,9 +21,21 @@ const Images = {
 
     document.getElementById('refreshImages').addEventListener('click', () => this.loadList());
     document.getElementById('pruneImagesBtn').addEventListener('click', () => this.confirmPrune());
+    document.getElementById('toggleHiddenBtn').addEventListener('click', () => this.toggleHidden());
 
     await this.loadList();
     this.refreshTimer = setInterval(() => this.loadList(), 30000);
+  },
+
+  // `showAll` flips between the default (hide build cache) and the full
+  // (show everything) listings. State is held in memory only — we don't
+  // persist it across page reloads because the next list refresh would
+  // re-evaluate it anyway.
+  showAll: false,
+
+  async toggleHidden() {
+    this.showAll = !this.showAll;
+    await this.loadList();
   },
 
   destroy() {
@@ -31,7 +44,7 @@ const Images = {
 
   async loadList() {
     try {
-      const data = await API.getImages(true);
+      const data = await API.getImages(true, this.showAll);
       this.data = data || { images: [], totals: null };
       this.renderTable();
     } catch (err) {
@@ -44,23 +57,64 @@ const Images = {
     const summary = document.getElementById('imagesSummary');
     const totals = this.data.totals || { count: 0, inUseCount: 0, unusedCount: 0, buildCacheCount: 0, totalSize: 0, unusedSize: 0 };
 
+    // Toggle the "Show hidden" button. We show it whenever there are
+    // hidden build-cache intermediates AND we're currently in the
+    // default (filtered) view. When the user has clicked the button
+    // and we're showing everything, the button label flips to
+    // "Hide build cache" so the action is reversible.
+    const toggleBtn = document.getElementById('toggleHiddenBtn');
+    if (toggleBtn) {
+      const hiddenCount = totals.hiddenCount || 0;
+      if (this.showAll) {
+        toggleBtn.style.display = '';
+        toggleBtn.textContent = I18n.t('images.hideHidden') || '隐藏构建缓存';
+        toggleBtn.setAttribute('data-i18n', 'images.hideHidden');
+      } else if (hiddenCount > 0) {
+        toggleBtn.style.display = '';
+        toggleBtn.textContent = (I18n.t('images.showHidden') || '显示已隐藏')
+          .replace('{n}', hiddenCount);
+        toggleBtn.setAttribute('data-i18n', '');
+      } else {
+        toggleBtn.style.display = 'none';
+      }
+    }
+
     if (summary) {
       const buildCacheCount = totals.buildCacheCount || 0;
+      const hiddenCount = totals.hiddenCount || 0;
       const unusedOnly = Math.max(0, (totals.unusedCount || 0) - buildCacheCount);
-      summary.textContent = I18n.t('images.summary')
+      // Show the hidden-count hint only when we actually hid something.
+      // When the user opens "show all" via the toggle below, the count is 0
+      // and we drop the parenthetical so the summary stays clean.
+      const hiddenHint = hiddenCount > 0
+        ? (I18n.t('images.hiddenHint')
+            ? I18n.t('images.hiddenHint').replace('{n}', hiddenCount)
+            : `（已隐藏 ${hiddenCount} 个构建缓存中间层）`)
+        : '';
+      summary.textContent = (I18n.t('images.summary')
         ? I18n.t('images.summary')
             .replace('{total}', totals.count)
             .replace('{inUse}', totals.inUseCount)
             .replace('{unused}', unusedOnly)
             .replace('{buildCache}', buildCacheCount)
             .replace('{unusedSize}', formatBytes(totals.unusedSize || 0))
-        : `共 ${totals.count} 个，${totals.inUseCount} 个使用中，${buildCacheCount} 个构建缓存，${unusedOnly} 个未使用（${formatBytes(totals.unusedSize || 0)}）`;
+        : `共 ${totals.count} 个，${totals.inUseCount} 个使用中，${buildCacheCount} 个构建缓存，${unusedOnly} 个未使用（${formatBytes(totals.unusedSize || 0)}）`)
+        + (hiddenHint ? ' ' + hiddenHint : '');
     }
 
     if (!this.data.images || this.data.images.length === 0) {
+      // Distinguish two empty states:
+      //   - truly no images on this host (decorated.length === 0)
+      //   - everything was hidden because it's build-cache intermediates
+      //     (decorated.length > 0 but all of them are build cache)
+      const totals = this.data.totals || {};
+      const hasHidden = (totals.hiddenCount || 0) > 0;
+      const emptyMsg = hasHidden
+        ? (I18n.t('images.allHidden') || '所有镜像都是构建缓存中间层，已隐藏。请点击「一键清理未使用」清理。')
+        : null;
       el.innerHTML = `<div class="empty-state">
         <div class="empty-icon"><img src="/img/icons/images.svg" alt="" style="width:48px;height:48px;opacity:0.3;filter:invert(1)"></div>
-        <p data-i18n="images.noImages">暂无镜像</p>
+        <p ${emptyMsg ? '' : 'data-i18n="images.noImages"'}>${emptyMsg || '暂无镜像'}</p>
       </div>`;
       I18n.apply();
       return;

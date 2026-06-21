@@ -127,7 +127,12 @@ const API = {
   browseHost(p = '/') { return this.get(`/containers/host/browse?path=${encodeURIComponent(p)}`); },
 
   // Images
-  getImages(all = true) { return this.get(`/containers/images?all=${all}`); },
+  getImages(all = true, showAll = false) {
+    const params = new URLSearchParams();
+    params.set('all', all);
+    if (showAll) params.set('show_all', 'true');
+    return this.get(`/containers/images?${params.toString()}`);
+  },
   getImage(id) { return this.get(`/containers/images/${id}`); },
   removeImage(id, options = {}) {
     const params = new URLSearchParams();

@@ -248,6 +248,10 @@
   "images.buildCache": "Build cache",
   "images.buildCacheHint": "This image is a Docker build cache intermediate, referenced as a parent layer by other images",
   "images.buildCacheNote": "This image is a Docker build cache intermediate and is referenced as a parent layer by other images — it cannot be deleted individually. Use \"Prune Unused\" to clean it as part of the build cache.",
+  "images.hiddenHint": "(hidden {n} build cache intermediates)",
+  "images.showHidden": "Show hidden ({n})",
+  "images.hideHidden": "Hide build cache",
+  "images.allHidden": "All images are build cache intermediates and are hidden. Click \"Prune Unused\" to clean them up.",
   "images.nothingToPrune": "No unused images to prune",
   "images.pruning": "Pruning unused images...",
   "images.pruned": "Pruned {n} unused images, reclaimed {size}"

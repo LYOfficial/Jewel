@@ -121,6 +121,55 @@ async function getContainerLogs(id, tail = 100) {
   return logs.toString('utf-8');
 }
 
+// Capture logs from every container belonging to a compose project, regardless
+// of state (running, exited, dead, created, restarting). Used on deploy failure
+// to salvage diagnostics before `compose down` tears the containers down.
+//
+// Returns a string ready to be appended to the deploy log, or an empty string
+// if the Docker API is unreachable or no containers were found.
+async function captureComposeProjectLogs(projectName, tail = 500) {
+  let containers = [];
+  try {
+    const all = await listContainers(true);
+    containers = all.filter(c =>
+      c.Labels && c.Labels['com.docker.compose.project'] === projectName
+    );
+  } catch (err) {
+    return `[failed-container-logs] Could not list containers: ${err.message}\n`;
+  }
+  if (!containers.length) {
+    return '[failed-container-logs] No containers were found for this compose project.\n';
+  }
+
+  const out = [];
+  out.push(`[failed-container-logs] Captured ${containers.length} container(s) at ${new Date().toISOString()}`);
+  out.push('');
+
+  // Sort by name for stable output across runs.
+  containers.sort((a, b) => {
+    const an = (a.Names && a.Names[0]) || '';
+    const bn = (b.Names && b.Names[0]) || '';
+    return an.localeCompare(bn);
+  });
+
+  for (const c of containers) {
+    const name = (c.Names && c.Names[0]) || c.Id;
+    const state = c.State || 'unknown';
+    const status = c.Status || '';
+    out.push(`----- container: ${name} (state=${state}, status="${status}") -----`);
+    try {
+      const logs = await getContainerLogs(c.Id, tail);
+      out.push(logs && logs.length ? logs : '(no log output)');
+    } catch (err) {
+      out.push(`(failed to read logs: ${err.message})`);
+    }
+    out.push('');
+  }
+  out.push('[failed-container-logs] End of captured logs');
+  out.push('');
+  return out.join('\n');
+}
+
 async function getContainerStats(id) {
   const container = await getContainer(id);
   return new Promise((resolve, reject) => {
@@ -342,6 +391,20 @@ async function deployProject(project) {
     if (stdout) appendDeployLog(project.id, stdout);
     if (stderr) appendDeployLog(project.id, stderr);
     appendDeployLog(project.id, `\n[error] Command exited with code ${err.code || err.status}\n`);
+
+    // Salvage container logs BEFORE the cleanup teardown removes them. This
+    // makes it possible to diagnose health-check timeouts, entrypoint hangs,
+    // and other container-level failures even after `compose down` has run.
+    try {
+      appendDeployLog(
+        project.id,
+        '\n[recovery] Capturing container logs before teardown (deploy failed; containers will be removed next)…\n'
+      );
+      const recovered = await captureComposeProjectLogs(project.name, 500);
+      appendDeployLog(project.id, recovered);
+    } catch (recoveryErr) {
+      appendDeployLog(project.id, `[recovery] Failed to capture container logs: ${recoveryErr.message}\n`);
+    }
 
     // Auto-cleanup: tear down any partial state so the next deploy starts fresh.
     // - down: removes containers
@@ -635,10 +698,12 @@ module.exports = {
   deployProject,
   stopProject,
   getProjectContainers,
+  captureComposeProjectLogs,
   getDockerInfo,
   ensureEnvFiles,
   findContainerByName,
   readDeployLog,
+  appendDeployLog,
   listImages,
   getImageInfo,
   getImageHistory,

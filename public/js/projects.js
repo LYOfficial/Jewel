@@ -371,6 +371,14 @@ const Projects = {
           <div class="log-viewer" id="projectDeployLog">${I18n.t('common.loading') || 'Loading...'}</div>
         </div>
         <div class="form-group">
+          <label data-i18n="project.failedContainerLogs">失败时的容器日志</label>
+          <div class="log-viewer-toolbar">
+            <button class="btn btn-sm" id="captureFailedLogsBtn" data-i18n="project.captureFailedLogs">重新捕获容器日志</button>
+            <span class="log-viewer-hint" id="captureFailedLogsHint" data-i18n="project.captureFailedLogsHint">仅捕获当前残留的容器日志（部署失败后的容器可能已被自动清理）</span>
+          </div>
+          <div class="log-viewer" id="projectFailedContainerLogs">${I18n.t('common.loading') || 'Loading...'}</div>
+        </div>
+        <div class="form-group">
           <label data-i18n="project.logs">日志</label>
           <div class="log-viewer" id="projectLogs">${I18n.t('common.loading') || 'Loading...'}</div>
         </div>
@@ -394,6 +402,58 @@ const Projects = {
           const text = (deployLogResp && deployLogResp.log) || '';
           deployEl.textContent = text.trim() ? text : (I18n.t('project.noDeployLog') || 'No deploy log yet. Click deploy to see full terminal output.');
           deployEl.scrollTop = deployEl.scrollHeight;
+        }
+      } catch { /* ignore */ }
+
+      // Render the failed-container-logs section by extracting the
+      // [failed-container-logs] / [manual-capture] sections out of the
+      // deploy log. This way, every failed deploy from now on leaves a
+      // permanent trace in the deploy log, and the user doesn't have to
+      // dig through the entire log to find it.
+      try {
+        const failedEl = document.getElementById('projectFailedContainerLogs');
+        if (failedEl) {
+          const deployLogResp = await API.getProjectDeployLog(id);
+          const fullLog = (deployLogResp && deployLogResp.log) || '';
+          const blocks = extractFailedContainerBlocks(fullLog);
+          if (blocks.length) {
+            failedEl.textContent = blocks.join('\n\n' + '='.repeat(60) + '\n\n');
+            failedEl.scrollTop = failedEl.scrollHeight;
+          } else {
+            failedEl.textContent = I18n.t('project.noFailedContainerLogs') || 'No captured container logs from failed deploys yet. Failed deploys will save container logs here automatically; you can also click the button above to capture logs from any containers still around.';
+          }
+        }
+      } catch { /* ignore */ }
+
+      // Wire up the "重新捕获容器日志" button. It re-reads logs from any
+      // containers still around for this compose project and appends the
+      // snapshot to the deploy log + refreshes the panel.
+      try {
+        const captureBtn = document.getElementById('captureFailedLogsBtn');
+        if (captureBtn) {
+          captureBtn.addEventListener('click', async () => {
+            const original = captureBtn.textContent;
+            captureBtn.disabled = true;
+            captureBtn.textContent = I18n.t('project.capturingFailedLogs') || 'Capturing…';
+            try {
+              const resp = await API.captureProjectFailedLogs(id, 500);
+              const failedEl = document.getElementById('projectFailedContainerLogs');
+              const captured = (resp && resp.captured) || '';
+              if (failedEl) {
+                const blocks = extractFailedContainerBlocks(captured);
+                failedEl.textContent = blocks.length
+                  ? blocks.join('\n\n' + '='.repeat(60) + '\n\n')
+                  : (I18n.t('project.noFailedContainerLogs') || 'No captured container logs from failed deploys yet.');
+                failedEl.scrollTop = failedEl.scrollHeight;
+              }
+              Notify.success(I18n.t('project.capturedFailedLogs') || 'Captured container logs');
+            } catch (err) {
+              Notify.error(err.message);
+            } finally {
+              captureBtn.disabled = false;
+              captureBtn.textContent = original;
+            }
+          });
         }
       } catch { /* ignore */ }
 
@@ -456,3 +516,23 @@ const Projects = {
     }
   }
 };
+
+// Pull out every [failed-container-logs] / [manual-capture] block from a
+// deploy log so the "失败时的容器日志" panel can show them in chronological
+// order without dragging in the surrounding compose output.
+function extractFailedContainerBlocks(logText) {
+  if (!logText) return [];
+  const blocks = [];
+  // Capture everything between the opening marker and its matching
+  // "End of captured logs" footer (or the next blank-line + marker).
+  const startRe = /\[(failed-container-logs|manual-capture)\][^\n]*\n/g;
+  let m;
+  while ((m = startRe.exec(logText)) !== null) {
+    const start = m.index;
+    const after = logText.slice(start);
+    const endMatch = after.match(/\n\[failed-container-logs\] End of captured logs\n/);
+    const end = endMatch ? start + endMatch.index + endMatch[0].length : after.length;
+    blocks.push(logText.slice(start, end).trim());
+  }
+  return blocks;
+}

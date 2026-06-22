@@ -256,4 +256,24 @@ router.get('/:id/deploy-log', (req, res) => {
   res.json({ log });
 });
 
+// Re-capture logs from any containers still around for this compose project
+// and append them to the deploy log. Useful when the user wants to inspect
+// a failure after the auto-cleanup has already removed the containers — at
+// which point this will report "No containers were found". If something is
+// still running/exited, the user gets another snapshot of its output.
+router.post('/:id/capture-failed-logs', async (req, res) => {
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  try {
+    const tail = Math.max(50, Math.min(parseInt(req.query.tail, 10) || 500, 5000));
+    const snapshot = await dockerService.captureComposeProjectLogs(project.name, tail);
+    dockerService.appendDeployLog(project.id, '\n[manual-capture] ' + new Date().toISOString() + '\n' + snapshot);
+    const log = dockerService.readDeployLog(project.id);
+    res.json({ log, captured: snapshot });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

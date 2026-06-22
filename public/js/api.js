@@ -97,6 +97,9 @@ const API = {
   getProjectContainers(id) { return this.get(`/projects/${id}/containers`); },
   getProjectLogs(id) { return this.get(`/projects/${id}/logs`); },
   getProjectDeployLog(id) { return this.get(`/projects/${id}/deploy-log`); },
+  captureProjectFailedLogs(id, tail = 500) {
+    return this.post(`/projects/${id}/capture-failed-logs?tail=${encodeURIComponent(tail)}`);
+  },
   checkProjectUpdate(id) { return this.post(`/projects/${id}/check-update`); },
 
   // Containers

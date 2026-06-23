@@ -5,6 +5,7 @@ const path = require('path');
 const { exec, execSync } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const gitService = require('./git-service');
 
 let docker = null;
 let dockerAvailable = null;
@@ -448,12 +449,7 @@ async function deployProject(project) {
   }
 }
 
-// Rebuild a project: stop the existing compose project first, prune all
-// unused images (same as the "一键删除未使用" button on the images page),
-// then redeploy from scratch. Volumes are intentionally NOT removed —
-// the deploy project's own cleanup uses `compose down` (no -v), and the
-// prune step only touches images that nothing references, so user data
-// in named volumes and bind mounts is preserved.
+
 async function rebuildProject(project) {
   const projectDir = path.join(
     process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
@@ -473,7 +469,7 @@ async function rebuildProject(project) {
 
   // 1) Stop — use `compose down` (no -v) so named/bind volumes survive.
   try {
-    appendDeployLog(project.id, `[rebuild] Step 1/3 — stopping compose project\n`);
+    appendDeployLog(project.id, `[rebuild] Step 1/4 — stopping compose project\n`);
     await stopProject(project);
     appendDeployLog(project.id, `[rebuild] Stop complete\n\n`);
   } catch (err) {
@@ -481,13 +477,9 @@ async function rebuildProject(project) {
     appendDeployLog(project.id, `[rebuild] Stop failed (continuing): ${err.message}\n\n`);
   }
 
-  // 2) Prune unused images. This matches what the "一键删除未使用" button
-  // on the images page does: docker image prune -a -f + builder prune -a -f.
-  // Running containers in OTHER projects are not affected; only images not
-  // referenced by anything are removed, so the rebuild's next build will
-  // start from a clean image cache.
+
   try {
-    appendDeployLog(project.id, `[rebuild] Step 2/3 — pruning unused images\n`);
+    appendDeployLog(project.id, `[rebuild] Step 2/4 — pruning unused images\n`);
     const pruneResult = await pruneImages();
     const summary = pruneResult && pruneResult.output ? pruneResult.output.trim() : '';
     if (summary) appendDeployLog(project.id, summary + '\n');
@@ -501,13 +493,57 @@ async function rebuildProject(project) {
     appendDeployLog(project.id, `[rebuild] Prune failed (continuing): ${err.message}\n\n`);
   }
 
-  // 3) Deploy — reuse the same flow as a normal deploy (which already
-  // handles env_file sync, custom container_name injection, and so on).
-  appendDeployLog(project.id, `[rebuild] Step 3/3 — deploying\n`);
+
+  let updateResult = 'skipped';
+  let localCommit = null;
+  let remoteCommit = null;
+  try {
+    appendDeployLog(project.id, `[rebuild] Step 3/4 — checking for upstream updates\n`);
+    localCommit = await gitService.getRepoCommit(project.id);
+    await gitService.fetchRepo(project.id);
+    remoteCommit = await gitService.getRemoteCommit(project.id, project.git_branch);
+
+    if (!remoteCommit) {
+      appendDeployLog(
+        project.id,
+        `[rebuild] Could not determine remote commit (network or auth issue) — ` +
+        `deploying with local code\n\n`
+      );
+      updateResult = 'checkFailed';
+    } else if (remoteCommit === localCommit) {
+      appendDeployLog(
+        project.id,
+        `[rebuild] Already up to date at ${localCommit || '(unknown)'} — skipping pull\n\n`
+      );
+      updateResult = 'upToDate';
+    } else {
+      appendDeployLog(
+        project.id,
+        `[rebuild] Update found: ${localCommit || '(unknown)'} → ${remoteCommit}; pulling\n`
+      );
+      await gitService.pullRepo(project.id, project.git_branch);
+      const newLocal = await gitService.getRepoCommit(project.id);
+      appendDeployLog(
+        project.id,
+        `[rebuild] Pull complete, now at ${newLocal || '(unknown)'}\n\n`
+      );
+      updateResult = 'updated';
+    }
+  } catch (err) {
+    // Any error in the update step is non-fatal — log and continue.
+    appendDeployLog(
+      project.id,
+      `[rebuild] Update check failed (continuing with local code): ${err.message}\n\n`
+    );
+    updateResult = 'checkFailed';
+  }
+
+
+  appendDeployLog(project.id, `[rebuild] Step 4/4 — deploying\n`);
   try {
     const stdout = await deployProject(project);
     appendDeployLog(project.id, `\n=== Rebuild succeeded at ${new Date().toISOString()} ===\n`);
-    return stdout;
+    return { stdout, update: updateResult, localCommit, remoteCommit };
   } catch (err) {
     // deployProject already wrote "=== Deploy failed at ... ===" to the log.
     appendDeployLog(project.id, `\n=== Rebuild failed at ${new Date().toISOString()} ===\n`);

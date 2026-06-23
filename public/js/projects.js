@@ -35,7 +35,7 @@ const Projects = {
           <th data-i18n="project.actions">操作</th>
         </tr></thead>
         <tbody>${projects.map(p => `
-          <tr>
+          <tr data-project-id="${p.id}">
             <td><a href="#" onclick="Projects.showDetail(${p.id});return false">${esc(p.name)}</a></td>
             <td><span class="badge badge-${p.status}">${esc(I18n.t(`status.${p.status}`) || p.status)}</span></td>
             <td>${esc(p.git_branch)}</td>
@@ -44,11 +44,14 @@ const Projects = {
               ${p.update_available ? `<span class="badge badge-update" data-i18n="project.updateAvailable">有更新</span>` : ''}
             </td>
             <td>
-              ${p.update_available ? `<button class="btn btn-sm btn-update" onclick="Projects.updateProject(${p.id})" data-i18n="project.update">更新</button>` : ''}
-              <button class="btn btn-sm" onclick="Projects.deploy(${p.id})" data-i18n="project.deploy">部署</button>
-              <button class="btn btn-sm" onclick="Projects.stop(${p.id})" data-i18n="project.stop">停止</button>
-              <button class="btn btn-sm" onclick="Projects.showDetail(${p.id})" data-i18n="project.detail">详情</button>
-              <button class="btn btn-sm btn-danger" onclick="Projects.remove(${p.id})" data-i18n="project.delete">删除</button>
+              <span class="row-actions" data-project-actions="${p.id}">
+                ${p.update_available ? `<button class="btn btn-sm btn-update" data-action="update" onclick="Projects.updateProject(${p.id})" data-i18n="project.update">更新</button>` : ''}
+                <button class="btn btn-sm" data-action="deploy" onclick="Projects.deploy(${p.id})" data-i18n="project.deploy">部署</button>
+                <button class="btn btn-sm" data-action="rebuild" onclick="Projects.rebuild(${p.id})" data-i18n="project.rebuild">重构</button>
+                <button class="btn btn-sm" data-action="stop" onclick="Projects.stop(${p.id})" data-i18n="project.stop">停止</button>
+                <button class="btn btn-sm" data-action="detail" onclick="Projects.showDetail(${p.id})" data-i18n="project.detail">详情</button>
+                <button class="btn btn-sm btn-danger" data-action="delete" onclick="Projects.remove(${p.id})" data-i18n="project.delete">删除</button>
+              </span>
             </td>
           </tr>
         `).join('')}</tbody>
@@ -215,6 +218,7 @@ const Projects = {
   },
 
   async doDeploy(id) {
+    Projects.setRowStatus(id, 'deploying');
     try {
       Notify.info(I18n.t('project.deploying') || 'Deploying...');
       await API.deployProject(id);
@@ -222,6 +226,7 @@ const Projects = {
       this.loadList();
     } catch (err) {
       Notify.error(err.message);
+      this.loadList();
     } finally {
       // Refresh deploy log if the detail modal is currently open for this project
       try {
@@ -237,6 +242,13 @@ const Projects = {
   },
 
   async updateProject(id) {
+    // The update button only appears when `update_available` is true, so
+    // clicking it means "we know there's a new commit — pull + redeploy".
+    // We hide the button immediately and flip the status badge to
+    // "部署中" so the user gets instant feedback even before the server
+    // has had time to write `status='deploying'` to the DB.
+    Projects.setRowStatus(id, 'deploying');
+    Projects.hideRowAction(id, 'update');
     try {
       Notify.info(I18n.t('project.updating') || 'Updating project...');
       await API.deployProject(id);
@@ -244,7 +256,59 @@ const Projects = {
       this.loadList();
     } catch (err) {
       Notify.error(err.message);
+      this.loadList();
     }
+  },
+
+  async rebuild(id) {
+    const ok = await Modal.confirm({
+      title: I18n.t('project.rebuild') || '重构',
+      body: I18n.t('project.rebuildConfirm') || '即将停止容器、清理未使用的镜像、然后重新部署。挂载卷中的数据会保留。是否继续？',
+      okLabel: I18n.t('project.rebuild') || '重构',
+      okClass: 'btn-warning'
+    });
+    if (!ok) return;
+
+    Projects.setRowStatus(id, 'rebuilding');
+    try {
+      Notify.info(I18n.t('project.rebuilding') || 'Rebuilding...');
+      await API.rebuildProject(id);
+      Notify.success(I18n.t('project.rebuildSuccess') || 'Rebuilt successfully');
+      this.loadList();
+    } catch (err) {
+      Notify.error(err.message);
+      this.loadList();
+    }
+  },
+
+  // Update the status badge of a single project row in-place, without
+  // re-rendering the entire list. Called by deploy/update/rebuild right
+  // after the user clicks a button so the badge flips to "部署中" / "重构中"
+  // immediately, before the server has even acknowledged the request.
+  // The trailing loadList() in each handler will reconcile any drift.
+  setRowStatus(id, status) {
+    try {
+      const row = document.querySelector(`tr[data-project-id="${id}"]`);
+      if (!row) return;
+      const badge = row.querySelector('td:nth-child(2) .badge');
+      if (badge) {
+        badge.className = `badge badge-${status}`;
+        badge.textContent = I18n.t(`status.${status}`) || status;
+      }
+    } catch { /* ignore — best-effort UI update */ }
+  },
+
+  // Hide a single action button in a project row by data-action. Used to
+  // make the "更新" button vanish the moment the user clicks it (its
+  // precondition — `update_available` — is no longer true once the new
+  // commit has been pulled and deployed).
+  hideRowAction(id, action) {
+    try {
+      const row = document.querySelector(`tr[data-project-id="${id}"]`);
+      if (!row) return;
+      const btn = row.querySelector(`[data-action="${action}"]`);
+      if (btn) btn.style.display = 'none';
+    } catch { /* ignore */ }
   },
 
   async checkUpdate(id) {

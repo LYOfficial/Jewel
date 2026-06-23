@@ -448,6 +448,73 @@ async function deployProject(project) {
   }
 }
 
+// Rebuild a project: stop the existing compose project first, prune all
+// unused images (same as the "一键删除未使用" button on the images page),
+// then redeploy from scratch. Volumes are intentionally NOT removed —
+// the deploy project's own cleanup uses `compose down` (no -v), and the
+// prune step only touches images that nothing references, so user data
+// in named volumes and bind mounts is preserved.
+async function rebuildProject(project) {
+  const projectDir = path.join(
+    process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
+    'projects',
+    String(project.id)
+  );
+
+  const startTime = new Date().toISOString();
+  resetDeployLog(project.id, `=== Rebuild started at ${startTime} ===\n[project] ${project.name} (id=${project.id})\n[cwd] ${projectDir}\n\n`);
+
+  const composePath = path.join(projectDir, project.compose_path);
+  if (!fs.existsSync(composePath)) {
+    const msg = `docker-compose file not found: ${composePath}`;
+    appendDeployLog(project.id, `[error] ${msg}\n`);
+    throw new Error(msg);
+  }
+
+  // 1) Stop — use `compose down` (no -v) so named/bind volumes survive.
+  try {
+    appendDeployLog(project.id, `[rebuild] Step 1/3 — stopping compose project\n`);
+    await stopProject(project);
+    appendDeployLog(project.id, `[rebuild] Stop complete\n\n`);
+  } catch (err) {
+    // Stop failure should not abort the rebuild — log it and continue.
+    appendDeployLog(project.id, `[rebuild] Stop failed (continuing): ${err.message}\n\n`);
+  }
+
+  // 2) Prune unused images. This matches what the "一键删除未使用" button
+  // on the images page does: docker image prune -a -f + builder prune -a -f.
+  // Running containers in OTHER projects are not affected; only images not
+  // referenced by anything are removed, so the rebuild's next build will
+  // start from a clean image cache.
+  try {
+    appendDeployLog(project.id, `[rebuild] Step 2/3 — pruning unused images\n`);
+    const pruneResult = await pruneImages();
+    const summary = pruneResult && pruneResult.output ? pruneResult.output.trim() : '';
+    if (summary) appendDeployLog(project.id, summary + '\n');
+    appendDeployLog(
+      project.id,
+      `[rebuild] Prune complete: ${pruneResult.deleted || 0} image(s) removed, ` +
+      `reclaimed ${pruneResult.SpaceReclaimed || 0} bytes\n\n`
+    );
+  } catch (err) {
+    // Prune failure is non-fatal — log it and continue to deploy.
+    appendDeployLog(project.id, `[rebuild] Prune failed (continuing): ${err.message}\n\n`);
+  }
+
+  // 3) Deploy — reuse the same flow as a normal deploy (which already
+  // handles env_file sync, custom container_name injection, and so on).
+  appendDeployLog(project.id, `[rebuild] Step 3/3 — deploying\n`);
+  try {
+    const stdout = await deployProject(project);
+    appendDeployLog(project.id, `\n=== Rebuild succeeded at ${new Date().toISOString()} ===\n`);
+    return stdout;
+  } catch (err) {
+    // deployProject already wrote "=== Deploy failed at ... ===" to the log.
+    appendDeployLog(project.id, `\n=== Rebuild failed at ${new Date().toISOString()} ===\n`);
+    throw err;
+  }
+}
+
 async function stopProject(project) {
   const projectDir = path.join(
     process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
@@ -696,6 +763,7 @@ module.exports = {
   getContainerLogs,
   getContainerStats,
   deployProject,
+  rebuildProject,
   stopProject,
   getProjectContainers,
   captureComposeProjectLogs,

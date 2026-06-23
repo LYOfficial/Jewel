@@ -92,6 +92,7 @@ const API = {
   updateProjectEnv(id, env_vars) { return this.put(`/projects/${id}/env`, { env_vars }); },
   deleteProject(id) { return this.del(`/projects/${id}`); },
   deployProject(id) { return this.post(`/projects/${id}/deploy`); },
+  rebuildProject(id) { return this.post(`/projects/${id}/rebuild`); },
   stopProject(id) { return this.post(`/projects/${id}/stop`); },
   restartProject(id) { return this.post(`/projects/${id}/restart`); },
   getProjectContainers(id) { return this.get(`/projects/${id}/containers`); },

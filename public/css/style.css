@@ -837,6 +837,7 @@ tr:hover { background: var(--bg-hover); }
 .badge-paused { background: rgba(255,170,0,0.15); color: var(--warning); }
 .badge-error { background: rgba(255,68,68,0.15); color: var(--danger); }
 .badge-deploying { background: rgba(68,136,255,0.15); color: var(--info); }
+.badge-rebuilding { background: rgba(255,170,0,0.18); color: var(--warning); }
 .badge-idle { background: rgba(153,153,153,0.1); color: var(--text-muted); }
 .badge-ready { background: rgba(68,204,68,0.1); color: var(--success); }
 .badge-cloning { background: rgba(255,170,0,0.15); color: var(--warning); }

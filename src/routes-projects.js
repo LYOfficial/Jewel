@@ -167,6 +167,31 @@ router.post('/:id/deploy', async (req, res) => {
   }
 });
 
+// Rebuild: stop compose → prune all unused images → redeploy.
+// Volumes are preserved. The status is flipped to 'rebuilding' synchronously
+// at the very top so the UI sees immediate feedback even if the rebuild
+// takes a long time.
+router.post('/:id/rebuild', async (req, res) => {
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  try {
+    db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('rebuilding', project.id);
+
+    try {
+      await gitService.pullRepo(project.id, project.git_branch);
+    } catch { /* pull failed, continue with existing code */ }
+
+    const result = await dockerService.rebuildProject(project);
+    db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('running', project.id);
+    await projectUpdateService.updateCommitHash(project.id);
+    res.json({ message: 'Rebuilt successfully', output: result });
+  } catch (err) {
+    db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('error', project.id);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/:id/stop', async (req, res) => {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });

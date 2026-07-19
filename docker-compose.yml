@@ -17,6 +17,18 @@ services:
       - PORT=330
       - JWT_SECRET=change-this-in-production
       - JEWEL_COMMIT=${JEWEL_COMMIT:-latest}
+    # Git internally forks `git-remote-https` for every HTTPS fetch/pull.
+    # The default container PIDs limit can be exhausted during heavy use
+    # (rebuild + deploy + periodic checks across many projects), which
+    # surfaces as "cannot fork() for remote-https: Resource temporarily
+    # unavailable". -1 removes the limit entirely.
+    pids_limit: -1
+    # docker compose / build can open a lot of files in parallel; the
+    # default 1024 nofile cap is too low for that.
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     restart: unless-stopped
 
 volumes:

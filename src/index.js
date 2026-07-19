@@ -51,11 +51,20 @@ app.get(/^(?!\/api\/)(?!\/css\/)(?!\/js\/)(?!\/img\/)(?!\/lang\/)(?!\/login\.htm
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
-// Periodic checks: Jewel self-update + project commit updates
+// Periodic checks: Jewel self-update + project commit updates.
+// The project loop staggers per-project on its own (see
+// project-update-service.js), so we just need to keep the two
+// background tasks from colliding with each other.
+const SELF_UPDATE_INTERVAL_MS = 30 * 60 * 1000;
+const PROJECT_UPDATE_INTERVAL_MS = 10 * 60 * 1000;
+
 setInterval(() => {
   updateService.checkForUpdate().catch(() => {});
+}, SELF_UPDATE_INTERVAL_MS);
+
+setInterval(() => {
   projectUpdateService.checkProjectUpdates().catch(() => {});
-}, 5 * 60 * 1000);
+}, PROJECT_UPDATE_INTERVAL_MS);
 
 updateService.checkForUpdate().catch(() => {});
 projectUpdateService.checkProjectUpdates().catch(() => {});

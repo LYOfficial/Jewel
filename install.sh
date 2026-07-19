@@ -58,6 +58,14 @@ docker run -d \
   -p "${PORT}:330" \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "${DATA_VOLUME}:/data" \
+  # Git internally forks `git-remote-https` for every HTTPS fetch/pull.
+  # Default container PIDs limit (~512) can be exhausted during heavy
+  # use (rebuild + deploy + periodic checks), surfacing as
+  # "cannot fork() for remote-https: Resource temporarily unavailable".
+  # `--pids-limit=-1` removes the cap; the high nofile limit covers
+  # the parallel file handles `docker compose` / build needs.
+  --pids-limit=-1 \
+  --ulimit nofile=65536:65536 \
   -e NODE_ENV=production \
   -e DATA_DIR=/data \
   -e PORT=330 \

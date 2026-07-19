@@ -23,4 +23,12 @@ EXPOSE 330
 
 VOLUME ["/data"]
 
+# Bump the open-file limit inside the container. `docker compose` /
+# `docker build` opens many files in parallel and the default 1024
+# triggers "too many open files" during rebuilds. The PID cap is
+# removed by `install.sh` / `docker-compose.yml` since Docker doesn't
+# expose it as a Dockerfile directive.
+RUN echo "* soft nofile 65536" >> /etc/security/limits.conf \
+ && echo "* hard nofile 65536" >> /etc/security/limits.conf
+
 CMD ["node", "src/index.js"]

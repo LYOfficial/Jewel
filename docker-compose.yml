@@ -32,4 +32,10 @@ services:
     restart: unless-stopped
 
 volumes:
+  # Pin the volume name explicitly. Without `name:`, Compose v2 prefixes
+  # it with the project name (the directory basename), so the volume
+  # would silently turn into `<project>_jewel-data` on a fresh deploy and
+  # the container would attach to an empty volume — losing all projects
+  # and the SQLite DB. Pinning guarantees the same name across renames.
   jewel-data:
+    name: jewel-data

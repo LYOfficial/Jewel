@@ -50,25 +50,31 @@ Jewel 是一個輕量級的 Git 到 Docker 整合部署平台，靈感來源於 
 
 ## 快速開始
 
-### Docker 部署（推薦）
+### 標準 Docker 部署（推薦）
 
-一鍵安裝，無需 docker compose：
-
-```bash
-curl -sSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh | sh
-```
-
-自訂連接埠：
+宿主機需要 Docker 與 Git。建議先下載並檢查安裝腳本，再執行：
 
 ```bash
-# 先下載腳本
-curl -sSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh -o install.sh
 chmod +x install.sh
-# 指定連接埠安裝
-./install.sh 8080
+sudo ./install.sh
 ```
 
-訪問 `http://localhost:330` 即可使用。
+自訂宿主機連接埠可執行 `sudo ./install.sh 8080`。安裝器會先建置候選映像，再停止目前服務；升級時會保留 `/data` 掛載、連接埠與 JWT 密鑰。若新容器未能在 30 秒內就緒，會自動還原舊容器。
+
+安裝完成後訪問 `http://localhost:330`，或使用指定的自訂連接埠。
+
+### Docker Compose（進階 / 手動維護）
+
+```bash
+git clone https://github.com/LYOfficial/Jewel.git
+cd Jewel
+export JEWEL_COMMIT="$(git rev-parse HEAD)"
+export JWT_SECRET="$(openssl rand -hex 32)"
+docker compose up -d --build
+```
+
+Compose 部署建議使用 `git pull` 與 `docker compose up -d --build` 手動升級。若觸發 Jewel 內部更新，第一次更新後會交由標準獨立安裝器管理。
 
 ### 本地執行
 
@@ -106,7 +112,7 @@ npm start
 |------|--------|------|
 | `PORT` | `330` | 服務連接埠 |
 | `DATA_DIR` | `./data` | 資料儲存目錄 |
-| `JWT_SECRET` | `jewel-secret-change-in-production` | JWT 密鑰（正式環境務必修改） |
+| `JWT_SECRET` | 標準安裝器自動產生 | 直接執行 Node.js 時必須自行設定；安裝器升級會沿用既有值 |
 | `NODE_ENV` | `development` | 執行環境 |
 
 ---
@@ -115,7 +121,7 @@ npm start
 
 Jewel 會定期檢查 GitHub 倉庫是否有新的提交。當偵測到新版本時，會在左下角顯示更新提示。點擊確認後，Jewel 將自動拉取最新程式碼、構建新映像並重啟容器。
 
-更新採用兩階段機制：先構建新映像，完成後彈窗提示重啟，點擊重啟按鈕即可用新映像替換當前容器。無論使用 `install.sh` 還是 `docker compose` 部署，均可正常自我更新。
+內部更新會重用標準 `install.sh`：目前服務在線時先拉取程式碼並建置候選映像，建置成功後才切換容器並執行就緒檢查；失敗時會自動回滾，並保留原本的 `/data` 掛載、連接埠與 JWT 密鑰。希望繼續由 Compose 管理生命週期的使用者應採用手動升級。
 
 > 與其他專案不同，Jewel 不會自動更新，需要使用者手動確認。
 

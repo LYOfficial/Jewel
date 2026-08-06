@@ -269,15 +269,14 @@ async function applyUpdate() {
     if (binding && binding[0]?.HostPort) hostPort = binding[0].HostPort;
   } catch { /* fall back to default */ }
 
-  // Helper container needs: docker socket (to manage containers) and git/docker CLI.
-  // The official `docker:cli` image has docker, but not git or curl. We use
-  // `docker:24-cli` which is small and we'll install git + curl on the fly.
-  // Actually simpler: use alpine and install everything we need.
+  // The helper uses the same canonical installer as a first deployment.
+  // install.sh builds before stopping the current container and restores it
+  // automatically if the replacement does not become ready.
   const helperScript = `#!/bin/sh
 set -e
-apk add --no-cache curl docker-cli git >/dev/null 2>&1 || true
+apk add --no-cache curl docker-cli git >/dev/null
 sleep 2
-curl -sSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh | sh -s ${hostPort}
+curl -fsSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh | sh -s -- ${hostPort}
 `;
 
   fs.writeFileSync(path.join(config.dataDir, 'jewel-update.sh'), helperScript, 'utf-8');

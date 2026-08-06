@@ -3,9 +3,11 @@ services:
     build:
       context: .
       args:
-        JEWEL_COMMIT: ${JEWEL_COMMIT:-latest}
+        JEWEL_COMMIT: ${JEWEL_COMMIT:-unknown}
     image: jewel:latest
     container_name: jewel
+    labels:
+      io.jewel.managed: "true"
     ports:
       - "330:330"
     volumes:
@@ -15,8 +17,8 @@ services:
       - NODE_ENV=production
       - DATA_DIR=/data
       - PORT=330
-      - JWT_SECRET=change-this-in-production
-      - JEWEL_COMMIT=${JEWEL_COMMIT:-latest}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET before starting Jewel}
+      - JEWEL_COMMIT=${JEWEL_COMMIT:-unknown}
     # Git internally forks `git-remote-https` for every HTTPS fetch/pull.
     # The default container PIDs limit can be exhausted during heavy use
     # (rebuild + deploy + periodic checks across many projects), which

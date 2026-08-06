@@ -1,84 +1,208 @@
 #!/bin/sh
-# Jewel - Standalone Docker Installation (no docker-compose required)
+# Jewel - canonical standalone Docker installer
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh | sh
-#   ./install.sh              (default port 330)
-#   ./install.sh 8080         (custom port)
+#   curl -fsSL https://raw.githubusercontent.com/LYOfficial/Jewel/main/install.sh -o install.sh
+#   chmod +x install.sh
+#   ./install.sh              # default port 330
+#   ./install.sh 8080         # custom host port
 
-set -e
+set -eu
 
-PORT="${1:-330}"
-IMAGE="jewel:latest"
-CONTAINER="jewel"
-DATA_VOLUME="jewel-data"
-REPO="https://github.com/LYOfficial/Jewel.git"
-TMPDIR="/tmp/jewel-install"
+IMAGE="${JEWEL_IMAGE:-jewel:latest}"
+CONTAINER="${JEWEL_CONTAINER:-jewel}"
+DEFAULT_DATA_SOURCE="${JEWEL_DATA_SOURCE:-jewel-data}"
+REPO="${JEWEL_REPOSITORY:-https://github.com/LYOfficial/Jewel.git}"
+BRANCH="${JEWEL_BRANCH:-main}"
+REQUESTED_PORT="${1:-${JEWEL_PORT:-}}"
+ROLLBACK_CONTAINER="${CONTAINER}-rollback"
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/jewel-install.XXXXXX")"
+CANDIDATE_IMAGE="${IMAGE}-candidate-$$"
+PREVIOUS_IMAGE_ID=""
+HAD_EXISTING_CONTAINER=0
+SWAP_IN_PROGRESS=0
 
-echo "==> Jewel Standalone Installer"
-echo "    Port: ${PORT}"
+cleanup() {
+  STATUS=$?
+  trap - EXIT HUP INT TERM
+  if [ "$SWAP_IN_PROGRESS" -eq 1 ]; then
+    restore_previous_container || true
+  fi
+  rm -rf "$WORK_DIR"
+  exit "$STATUS"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 
-# ---- Check Docker ----
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Error: docker is not installed." >&2
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "Error: $1 is not installed." >&2
+    exit 1
+  fi
+}
+
+container_exists() {
+  docker container inspect "$1" >/dev/null 2>&1
+}
+
+read_container_env() {
+  docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null \
+    | sed -n "s/^$1=//p" \
+    | head -n 1
+}
+
+restore_previous_container() {
+  SWAP_IN_PROGRESS=0
+  echo "==> The new Jewel container did not become ready; restoring the previous container..." >&2
+  docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+
+  if [ -n "$PREVIOUS_IMAGE_ID" ]; then
+    docker tag "$PREVIOUS_IMAGE_ID" "$IMAGE" >/dev/null 2>&1 || true
+  else
+    docker image rm "$IMAGE" >/dev/null 2>&1 || true
+  fi
+
+  if [ "$HAD_EXISTING_CONTAINER" -eq 1 ] && container_exists "$ROLLBACK_CONTAINER"; then
+    docker rename "$ROLLBACK_CONTAINER" "$CONTAINER"
+    docker update --restart unless-stopped "$CONTAINER" >/dev/null 2>&1 || true
+    docker start "$CONTAINER" >/dev/null
+    echo "==> Previous Jewel container restored." >&2
+  fi
+}
+
+require_command docker
+require_command git
+
+if ! docker info >/dev/null 2>&1; then
+  echo "Error: Docker is installed but the daemon is not available." >&2
   exit 1
 fi
 
-# ---- Stop & remove existing container ----
-if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER}$"; then
-  echo "==> Stopping existing Jewel container..."
-  docker stop "$CONTAINER" 2>/dev/null || true
-  docker rm "$CONTAINER" 2>/dev/null || true
+# Recover a rollback container left by an interrupted earlier installation.
+if ! container_exists "$CONTAINER" && container_exists "$ROLLBACK_CONTAINER"; then
+  echo "==> Recovering the previous Jewel container from an interrupted installation..."
+  docker rename "$ROLLBACK_CONTAINER" "$CONTAINER"
+  docker update --restart unless-stopped "$CONTAINER" >/dev/null 2>&1 || true
+  docker start "$CONTAINER" >/dev/null 2>&1 || true
 fi
 
-# ---- Clone repo (or update if already cloned) ----
-if [ -d "$TMPDIR/.git" ]; then
-  echo "==> Updating local clone..."
-  cd "$TMPDIR" && git pull --ff-only || { echo "Clone outdated, re-cloning..."; rm -rf "$TMPDIR"; git clone --depth 1 "$REPO" "$TMPDIR"; }
+EXISTING_DATA_SOURCE=""
+EXISTING_PORT=""
+EXISTING_JWT_SECRET=""
+EXISTING_DOCKER_TIMEOUT=""
+EXISTING_BACKUP_HELPER=""
+
+if container_exists "$CONTAINER"; then
+  HAD_EXISTING_CONTAINER=1
+  EXISTING_DATA_SOURCE="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{if .Name}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null || true)"
+  EXISTING_PORT="$(docker inspect --format '{{with (index .HostConfig.PortBindings "330/tcp")}}{{(index . 0).HostPort}}{{end}}' "$CONTAINER" 2>/dev/null || true)"
+  EXISTING_JWT_SECRET="$(read_container_env JWT_SECRET || true)"
+  EXISTING_DOCKER_TIMEOUT="$(read_container_env DOCKER_READ_TIMEOUT_MS || true)"
+  EXISTING_BACKUP_HELPER="$(read_container_env BACKUP_HELPER_IMAGE || true)"
+fi
+
+PORT="${REQUESTED_PORT:-${EXISTING_PORT:-330}}"
+case "$PORT" in
+  ''|*[!0-9]*)
+    echo "Error: port must be an integer between 1 and 65535." >&2
+    exit 1
+    ;;
+esac
+if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+  echo "Error: port must be an integer between 1 and 65535." >&2
+  exit 1
+fi
+
+DATA_SOURCE="${JEWEL_DATA_SOURCE:-${EXISTING_DATA_SOURCE:-$DEFAULT_DATA_SOURCE}}"
+DOCKER_READ_TIMEOUT_VALUE="${DOCKER_READ_TIMEOUT_MS:-${EXISTING_DOCKER_TIMEOUT:-8000}}"
+BACKUP_HELPER_IMAGE_VALUE="${BACKUP_HELPER_IMAGE:-${EXISTING_BACKUP_HELPER:-busybox:1.36}}"
+
+echo "==> Jewel installer"
+echo "    Repository: ${REPO} (${BRANCH})"
+echo "    Port: ${PORT}"
+echo "    Data source: ${DATA_SOURCE}"
+
+echo "==> Cloning Jewel repository..."
+git clone --depth 1 --branch "$BRANCH" "$REPO" "$WORK_DIR"
+COMMIT="$(cd "$WORK_DIR" && git rev-parse HEAD)"
+
+echo "==> Building candidate image (the current Jewel container is still running)..."
+docker build \
+  --build-arg "JEWEL_COMMIT=${COMMIT}" \
+  -t "$CANDIDATE_IMAGE" \
+  "$WORK_DIR"
+
+case "$DATA_SOURCE" in
+  /*) ;;
+  *) docker volume create "$DATA_SOURCE" >/dev/null ;;
+esac
+
+JWT_SECRET_VALUE="${JWT_SECRET:-$EXISTING_JWT_SECRET}"
+if [ -z "$JWT_SECRET_VALUE" ]; then
+  JWT_SECRET_VALUE="$(docker run --rm "$CANDIDATE_IMAGE" node -e "process.stdout.write(require('crypto').randomBytes(48).toString('hex'))")"
+fi
+
+PREVIOUS_IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null || true)"
+
+# Only stop the current container after cloning and building have succeeded.
+if [ "$HAD_EXISTING_CONTAINER" -eq 1 ]; then
+  echo "==> Preparing the current Jewel container for rollback..."
+  docker rm -f "$ROLLBACK_CONTAINER" >/dev/null 2>&1 || true
+  SWAP_IN_PROGRESS=1
+  docker stop "$CONTAINER" >/dev/null
+  docker rename "$CONTAINER" "$ROLLBACK_CONTAINER"
 else
-  rm -rf "$TMPDIR"
-  echo "==> Cloning Jewel repository..."
-  git clone --depth 1 "$REPO" "$TMPDIR"
+  SWAP_IN_PROGRESS=1
 fi
 
-# ---- Build image ----
-echo "==> Building Jewel image (this may take a few minutes)..."
-docker build -t "$IMAGE" "$TMPDIR"
+docker tag "$CANDIDATE_IMAGE" "$IMAGE"
 
-# ---- Create data volume ----
-docker volume create "$DATA_VOLUME" 2>/dev/null || true
-
-# ---- Get commit SHA for version tracking ----
-COMMIT=$(cd "$TMPDIR" && git rev-parse HEAD 2>/dev/null || echo "unknown")
-
-# ---- Run container ----
-echo "==> Starting Jewel container..."
-docker run -d \
+echo "==> Starting the new Jewel container..."
+if ! docker run -d \
   --name "$CONTAINER" \
   --restart unless-stopped \
+  --label io.jewel.managed=true \
   -p "${PORT}:330" \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "${DATA_VOLUME}:/data" \
-  # Git internally forks `git-remote-https` for every HTTPS fetch/pull.
-  # Default container PIDs limit (~512) can be exhausted during heavy
-  # use (rebuild + deploy + periodic checks), surfacing as
-  # "cannot fork() for remote-https: Resource temporarily unavailable".
-  # `--pids-limit=-1` removes the cap; the high nofile limit covers
-  # the parallel file handles `docker compose` / build needs.
+  -v "${DATA_SOURCE}:/data" \
   --pids-limit=-1 \
   --ulimit nofile=65536:65536 \
   -e NODE_ENV=production \
   -e DATA_DIR=/data \
   -e PORT=330 \
+  -e "JWT_SECRET=${JWT_SECRET_VALUE}" \
+  -e "DOCKER_READ_TIMEOUT_MS=${DOCKER_READ_TIMEOUT_VALUE}" \
+  -e "BACKUP_HELPER_IMAGE=${BACKUP_HELPER_IMAGE_VALUE}" \
   -e "JEWEL_COMMIT=${COMMIT}" \
-  "$IMAGE"
+  "$IMAGE" >/dev/null; then
+  exit 1
+fi
 
-# ---- Cleanup ----
-rm -rf "$TMPDIR"
+echo "==> Waiting for Jewel to become ready..."
+READY=0
+ATTEMPT=0
+while [ "$ATTEMPT" -lt 30 ]; do
+  if docker exec "$CONTAINER" node -e "const http=require('http');const req=http.get('http://127.0.0.1:330/',res=>{res.resume();process.exit(res.statusCode<500?0:1)});req.on('error',()=>process.exit(1));req.setTimeout(1000,()=>{req.destroy();process.exit(1)})" >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+  ATTEMPT=$((ATTEMPT + 1))
+  sleep 1
+done
+
+if [ "$READY" -ne 1 ]; then
+  docker logs --tail 80 "$CONTAINER" >&2 2>/dev/null || true
+  exit 1
+fi
+
+SWAP_IN_PROGRESS=0
+if container_exists "$ROLLBACK_CONTAINER"; then
+  docker rm "$ROLLBACK_CONTAINER" >/dev/null 2>&1 || true
+fi
+docker image rm "$CANDIDATE_IMAGE" >/dev/null 2>&1 || true
 
 echo ""
 echo "==> Jewel is running at http://localhost:${PORT}"
 echo "    Default login: admin / adminwithjewel"
-echo "    (You will be asked to change the password on first login.)"
+echo "    You will be asked to change the password on first login."
 echo ""
-echo "    Self-update is supported — Jewel will detect new versions"
-echo "    and rebuild its own Docker image automatically."
+echo "    The data source, port, and JWT secret will be preserved by future self-updates."

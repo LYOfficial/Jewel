@@ -30,7 +30,8 @@ const Containers = {
 
   async loadList() {
     try {
-      const containers = await API.getContainers(true);
+      const [containers, projects] = await Promise.all([API.getContainers(true), API.getProjects().catch(() => [])]);
+      const projectByName = new Map(projects.map(project => [project.name, project]));
       const el = document.getElementById('containersList');
 
       if (!containers || containers.length === 0) {
@@ -45,6 +46,7 @@ const Containers = {
       el.innerHTML = `<table>
         <thead><tr>
           <th data-i18n="container.name">名称</th>
+          <th>项目</th>
           <th data-i18n="container.image">镜像</th>
           <th data-i18n="container.status">状态</th>
           <th data-i18n="container.ports">端口</th>
@@ -56,58 +58,29 @@ const Containers = {
           const mountCount = (c.Mounts || []).length;
           const state = c.State || 'unknown';
           const badgeClass = state === 'running' ? 'running' : state === 'paused' ? 'paused' : 'stopped';
+          const composeProject = c.Labels && c.Labels['com.docker.compose.project'];
+          const project = composeProject ? projectByName.get(composeProject) : null;
           return `
           <tr>
             <td>${esc((c.Names && c.Names[0]) || '-').replace(/^\//, '')}</td>
+            <td>${project ? `<a href="#" onclick="Projects.showDetail(${project.id});return false">${esc(project.name)}</a>` : `<span class="text-muted">${esc(composeProject || '独立容器')}</span>`}</td>
             <td><small>${esc(c.Image || '-')}</small></td>
-            <td>
-              <div class="status-dropdown" data-id="${c.Id}">
-                <button class="status-btn badge-${badgeClass}" onclick="Containers.toggleMenu('${c.Id}')">
-                  <span class="status-dot dot-${badgeClass}"></span>
-                  <span class="status-label">${esc(state)}</span>
-                  <span class="status-arrow">&#9662;</span>
-                </button>
-                <div class="status-menu" id="menu-${c.Id}">
-                  ${state === 'running' ? `
-                  <div class="status-menu-item" onclick="Containers.stop('${c.Id}')">
-                    <span class="mi-icon stop-icon">&#9632;</span> <span data-i18n="container.stop">停止</span>
-                  </div>
-                  <div class="status-menu-item danger" onclick="Containers.forceStop('${c.Id}')">
-                    <span class="mi-icon stop-icon">&#9632;</span> <span data-i18n="container.forceStop">强制停止</span>
-                  </div>
-                  <div class="status-menu-item" onclick="Containers.restart('${c.Id}')">
-                    <span class="mi-icon restart-icon">&#8635;</span> <span data-i18n="container.restart">重启</span>
-                  </div>
-                  <div class="status-menu-item" onclick="Containers.pause('${c.Id}')">
-                    <span class="mi-icon pause-icon">&#10074;&#10074;</span> <span data-i18n="container.pause">暂停</span>
-                  </div>
-                  ` : state === 'paused' ? `
-                  <div class="status-menu-item" onclick="Containers.unpause('${c.Id}')">
-                    <span class="mi-icon play-icon">&#9654;</span> <span data-i18n="container.unpause">恢复</span>
-                  </div>
-                  <div class="status-menu-item" onclick="Containers.stop('${c.Id}')">
-                    <span class="mi-icon stop-icon">&#9632;</span> <span data-i18n="container.stop">停止</span>
-                  </div>
-                  <div class="status-menu-item danger" onclick="Containers.forceStop('${c.Id}')">
-                    <span class="mi-icon stop-icon">&#9632;</span> <span data-i18n="container.forceStop">强制停止</span>
-                  </div>
-                  ` : `
-                  <div class="status-menu-item" onclick="Containers.start('${c.Id}')">
-                    <span class="mi-icon play-icon">&#9654;</span> <span data-i18n="container.start">启动</span>
-                  </div>
-                  `}
-                </div>
-              </div>
-            </td>
+            <td><span class="badge badge-${badgeClass}"><span class="status-dot dot-${badgeClass}"></span>${esc(state)}</span></td>
             <td><small>${ports || '-'}</small></td>
             <td>${mountCount > 0 ? `<span class="badge badge-ready">${mountCount}</span>` : '-'}</td>
-            <td class="action-cell">
-              <button class="btn btn-sm" onclick="Containers.showLogs('${c.Id}')" data-i18n="container.logs">日志</button>
-              <button class="btn btn-sm" onclick="Containers.showTerminal('${c.Id}')" data-i18n="container.terminal">终端</button>
-              <button class="btn btn-sm" onclick="Containers.showFileManager('${c.Id}')" data-i18n="container.files">文件</button>
-              <button class="btn btn-sm" onclick="Containers.showMounts('${c.Id}')" data-i18n="container.mounts">挂载</button>
-              <button class="btn btn-sm btn-danger" onclick="Containers.remove('${c.Id}')" data-i18n="container.remove">删除</button>
-            </td>
+            <td class="action-cell">${App.actionMenu([
+              { label: I18n.t('container.start') || '启动', icon: '▶', visible: state !== 'running' && state !== 'paused', onclick: `Containers.start('${c.Id}')` },
+              { label: I18n.t('container.stop') || '停止', icon: '■', visible: state === 'running' || state === 'paused', onclick: `Containers.stop('${c.Id}')` },
+              { label: I18n.t('container.forceStop') || '强制停止', icon: '■', danger: true, visible: state === 'running' || state === 'paused', onclick: `Containers.forceStop('${c.Id}')` },
+              { label: I18n.t('container.restart') || '重启', icon: '↻', visible: state === 'running', onclick: `Containers.restart('${c.Id}')` },
+              { label: I18n.t('container.pause') || '暂停', icon: 'Ⅱ', visible: state === 'running', onclick: `Containers.pause('${c.Id}')` },
+              { label: I18n.t('container.unpause') || '恢复', icon: '▶', visible: state === 'paused', onclick: `Containers.unpause('${c.Id}')` },
+              { label: I18n.t('container.logs') || '日志', icon: '≡', onclick: `Containers.showLogs('${c.Id}')` },
+              { label: I18n.t('container.terminal') || '终端', icon: '>_', onclick: `Containers.showTerminal('${c.Id}')` },
+              { label: I18n.t('container.files') || '文件', icon: '□', onclick: `Containers.showFileManager('${c.Id}')` },
+              { label: I18n.t('container.mounts') || '挂载', icon: '◇', onclick: `Containers.showMounts('${c.Id}')` },
+              { label: I18n.t('container.remove') || '删除', icon: '×', danger: true, onclick: `Containers.remove('${c.Id}')` }
+            ])}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>`;

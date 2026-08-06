@@ -5,7 +5,10 @@ const I18n = {
   async init() {
     const saved = localStorage.getItem('jewel-lang');
     if (saved) this.currentLang = saved;
-    await this.loadLang(this.currentLang);
+    await Promise.all([
+      this.loadLang(this.currentLang),
+      this.currentLang === 'en' ? Promise.resolve() : this.loadLang('en')
+    ]);
   },
 
   async loadLang(lang) {
@@ -28,7 +31,8 @@ const I18n = {
 
   t(key) {
     const dict = this.translations[this.currentLang] || {};
-    return dict[key] || key;
+    const fallback = this.translations.en || {};
+    return dict[key] || fallback[key] || key;
   },
 
   apply() {

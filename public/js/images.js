@@ -9,9 +9,14 @@ const Images = {
           <div class="card-title" data-i18n="images.list">镜像列表</div>
           <div class="topbar-actions">
             <span id="imagesSummary" style="color:var(--text-muted);font-size:12px"></span>
-            <button class="btn btn-sm" id="toggleHiddenBtn" style="display:none" data-i18n="images.showHidden">显示已隐藏</button>
-            <button class="btn btn-sm" id="refreshImages" data-i18n="common.refresh">刷新</button>
-            <button class="btn btn-sm btn-danger" id="pruneImagesBtn" data-i18n="images.pruneAll">一键删除未使用</button>
+            <details class="action-menu page-action-menu">
+              <summary>操作 <span>⌄</span></summary>
+              <div class="action-menu-popover">
+                <button class="action-menu-item" id="toggleHiddenBtn" style="display:none" data-i18n="images.showHidden">显示已隐藏</button>
+                <button class="action-menu-item" id="refreshImages" data-i18n="common.refresh">刷新</button>
+                <button class="action-menu-item danger" id="pruneImagesBtn" data-i18n="images.pruneAll">一键删除未使用</button>
+              </div>
+            </details>
           </div>
         </div>
         <div id="imagesList" class="table-container"></div>
@@ -164,10 +169,10 @@ const Images = {
         <td>${formatBytes(img.Size || 0)}</td>
         <td><small>${esc(created)}</small></td>
         <td>${usageBadge}</td>
-        <td class="action-cell">
-          <button class="btn btn-sm" onclick="Images.showDetail('${img.Id}')">${detailLabel}</button>
-          <button class="btn btn-sm btn-danger" onclick="Images.confirmRemove('${img.Id}', ${img.in_use}, ${!!img.is_build_cache})">${removeLabel}</button>
-        </td>
+        <td class="action-cell">${App.actionMenu([
+          { label: detailLabel, icon: '⌕', onclick: `Images.showDetail('${img.Id}')` },
+          { label: removeLabel, icon: '×', danger: true, onclick: `Images.confirmRemove('${img.Id}', ${img.in_use}, ${!!img.is_build_cache})` }
+        ])}</td>
       </tr>`;
   },
 

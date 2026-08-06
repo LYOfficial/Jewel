@@ -40,10 +40,10 @@ const Tokens = {
             <td>${esc(t.provider === 'github' ? 'GitHub' : t.provider === 'gitlab' ? 'GitLab' : t.provider)}</td>
             <td><small>${esc(t.host || '-')}</small></td>
             <td><small>${t.created_at || '-'}</small></td>
-            <td>
-              <button class="btn btn-sm" onclick="Tokens.showEditForm(${t.id})" data-i18n="tokens.edit">编辑</button>
-              <button class="btn btn-sm btn-danger" onclick="Tokens.remove(${t.id})" data-i18n="tokens.delete">删除</button>
-            </td>
+            <td class="action-cell">${App.actionMenu([
+              { label: I18n.t('tokens.edit') || '编辑', icon: '✎', onclick: `Tokens.showEditForm(${t.id})` },
+              { label: I18n.t('tokens.delete') || '删除', icon: '×', danger: true, onclick: `Tokens.remove(${t.id})` }
+            ])}</td>
           </tr>
         `).join('')}</tbody>
       </table>`;

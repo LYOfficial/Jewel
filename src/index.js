@@ -12,6 +12,8 @@ const routesImages = require('./routes-images');
 const routesGit = require('./routes-git');
 const routesSystem = require('./routes-system');
 const routesTokens = require('./routes-tokens');
+const routesBackups = require('./routes-backups');
+const backupService = require('./backup-service');
 
 const app = express();
 
@@ -36,6 +38,7 @@ app.use('/api/containers', routesContainers);
 app.use('/api/git', routesGit);
 app.use('/api/system', routesSystem);
 app.use('/api/tokens', routesTokens);
+app.use('/api/backups', routesBackups);
 
 // Fallback error handler — ensure API errors return JSON, not HTML
 app.use((err, req, res, next) => {
@@ -68,6 +71,7 @@ setInterval(() => {
 
 updateService.checkForUpdate().catch(() => {});
 projectUpdateService.checkProjectUpdates().catch(() => {});
+backupService.startScheduler();
 
 // Clear stale updating flag on startup (means we successfully restarted after update)
 updateService.clearUpdatingFlag();

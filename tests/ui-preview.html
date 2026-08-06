@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jewel UI Preview</title>
+  <link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><img src="/public/img/jewel.svg" class="sidebar-logo"><h1>JEWEL</h1><span class="version">v1.1</span></div>
+      <nav class="sidebar-nav">
+        <a class="nav-item"><span class="nav-icon"><img src="/public/img/icons/dashboard.svg"></span><span>仪表盘</span></a>
+        <a class="nav-item"><span class="nav-icon"><img src="/public/img/icons/projects.svg"></span><span>项目</span></a>
+        <a class="nav-item"><span class="nav-icon"><img src="/public/img/icons/containers.svg"></span><span>容器</span></a>
+        <a class="nav-item"><span class="nav-icon"><img src="/public/img/icons/images.svg"></span><span>镜像</span></a>
+        <a class="nav-item active"><span class="nav-icon"><img src="/public/img/icons/backups.svg"></span><span>备份中心</span></a>
+        <a class="nav-item"><span class="nav-icon"><img src="/public/img/icons/settings.svg"></span><span>设置</span></a>
+      </nav>
+    </aside>
+    <main class="main-content">
+      <header class="topbar"><div class="topbar-title">备份中心</div><div class="topbar-actions"><button class="user-menu-btn">admin⌄</button></div></header>
+      <div class="content-area">
+        <div class="page-shell">
+          <div class="page-heading">
+            <div><div class="page-eyebrow">DATA PROTECTION</div><h2>备份中心</h2><p>将项目挂载卷安全地同步到云端或本地存储。</p></div>
+            <div class="page-heading-actions"><details class="action-menu page-action-menu"><summary>新建 <span>⌄</span></summary><div class="action-menu-popover"><button class="action-menu-item"><span class="action-menu-icon">＋</span>备份计划</button><button class="action-menu-item"><span class="action-menu-icon">◇</span>存储目标</button></div></details></div>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card fluent-stat"><div class="stat-label">存储目标</div><div class="stat-value">4</div><div class="stat-hint">R2、OneDrive、百度网盘、AnyShare</div></div>
+            <div class="stat-card fluent-stat"><div class="stat-label">备份计划</div><div class="stat-value">6</div><div class="stat-hint">4 个自动计划</div></div>
+            <div class="stat-card fluent-stat"><div class="stat-label">运行中</div><div class="stat-value">1</div><div class="stat-hint">正在上传 68%</div></div>
+            <div class="stat-card fluent-stat"><div class="stat-label">近期结果</div><div class="stat-value">18/1</div><div class="stat-hint">成功 / 失败</div></div>
+          </div>
+          <section class="section-card">
+            <div class="section-card-header"><div><h3>备份计划</h3><p>按项目关联容器、镜像和挂载卷。</p></div></div>
+            <div class="table-container"><table class="resource-table">
+              <thead><tr><th>计划</th><th>项目</th><th>存储</th><th>范围</th><th>调度</th><th>最近状态</th><th></th></tr></thead>
+              <tbody>
+                <tr><td><strong>生产数据每日备份</strong><div class="table-subtext">备份时暂停项目</div></td><td>jewel-api</td><td><span class="provider-pill">Cloudflare R2</span><div class="table-subtext">东京归档桶</div></td><td><div class="chip-stack"><span class="resource-chip">jewel_db · 全部</span><span class="resource-chip">jewel_uploads · media</span></div></td><td>每 24 小时<div class="table-subtext">08-06 03:00</div></td><td><span class="badge badge-running">成功</span></td><td class="action-cell"><details class="action-menu" open><summary>•••</summary><div class="action-menu-popover"><button class="action-menu-item"><span class="action-menu-icon">▶</span>立即备份</button><button class="action-menu-item"><span class="action-menu-icon">✎</span>编辑计划</button><button class="action-menu-item danger"><span class="action-menu-icon">×</span>删除计划</button></div></details></td></tr>
+                <tr><td><strong>附件增量归档</strong><div class="table-subtext">备份时暂停项目</div></td><td>docs-site</td><td><span class="provider-pill">OneDrive</span><div class="table-subtext">Team Drive</div></td><td><span class="resource-chip">docs_assets · uploads</span></td><td>每 6 小时</td><td><span class="badge badge-deploying">运行中</span></td><td class="action-cell">•••</td></tr>
+              </tbody>
+            </table></div>
+          </section>
+          <div class="resource-grid two-column">
+            <section class="section-card"><div class="section-card-header"><div><h3>存储目标</h3><p>凭据已自动遮蔽。</p></div></div><div class="provider-list">
+              <div class="provider-row"><div class="provider-mark">R2</div><div class="provider-main"><strong>东京归档桶</strong><span>Cloudflare R2 · 已启用</span></div><span>•••</span></div>
+              <div class="provider-row"><div class="provider-mark">AS</div><div class="provider-main"><strong>研发 AnyShare</strong><span>AnyShare · 已启用</span></div><span>•••</span></div>
+            </div></section>
+            <section class="section-card"><div class="section-card-header"><div><h3>最近任务</h3><p>失败时可复制诊断。</p></div></div><table class="compact-table"><thead><tr><th>任务</th><th>阶段</th><th>大小</th><th></th></tr></thead><tbody>
+              <tr><td><strong>#104 jewel-api</strong><div class="table-subtext">08-05 19:16</div></td><td><span class="badge badge-deploying">运行中</span><div class="table-subtext">上传</div></td><td>842.3 MB<div class="table-subtext">2 个包</div></td><td>•••</td></tr>
+              <tr><td><strong>#103 docs-site</strong><div class="table-subtext">08-05 13:00</div></td><td><span class="badge badge-error">失败</span><div class="table-subtext">上传</div></td><td>96.1 MB<div class="table-subtext">1 个包</div></td><td>•••</td></tr>
+            </tbody></table></section>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

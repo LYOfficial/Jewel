@@ -69,7 +69,15 @@ const API = {
       throw new Error(msg);
     }
 
-    if (!res.ok) throw new Error(data.error || 'Request failed');
+    if (!res.ok) {
+      const error = new Error(data.error || 'Request failed');
+      error.status = res.status;
+      error.operationId = data.operation_id;
+      error.projectId = data.project_id;
+      error.report = data.report;
+      error.payload = data;
+      throw error;
+    }
     return data;
   },
 
@@ -98,6 +106,9 @@ const API = {
   getProjectContainers(id) { return this.get(`/projects/${id}/containers`); },
   getProjectLogs(id) { return this.get(`/projects/${id}/logs`); },
   getProjectDeployLog(id) { return this.get(`/projects/${id}/deploy-log`); },
+  getProjectResources(id) { return this.get(`/projects/${id}/resources`); },
+  getProjectOperations(id, limit = 20) { return this.get(`/projects/${id}/operations?limit=${limit}`); },
+  getProjectErrorReport(id) { return this.get(`/projects/${id}/error-report`); },
   captureProjectFailedLogs(id, tail = 500) {
     return this.post(`/projects/${id}/capture-failed-logs?tail=${encodeURIComponent(tail)}`);
   },
@@ -158,6 +169,21 @@ const API = {
   createToken(data) { return this.post('/tokens', data); },
   updateToken(id, data) { return this.put(`/tokens/${id}`, data); },
   deleteToken(id) { return this.del(`/tokens/${id}`); },
+
+  // Backup center
+  getBackupVolumes(projectId = '') { return this.get(`/backups/volumes${projectId ? `?project_id=${projectId}` : ''}`); },
+  getBackupProviders() { return this.get('/backups/providers'); },
+  createBackupProvider(data) { return this.post('/backups/providers', data); },
+  updateBackupProvider(id, data) { return this.put(`/backups/providers/${id}`, data); },
+  deleteBackupProvider(id) { return this.del(`/backups/providers/${id}`); },
+  testBackupProvider(id) { return this.post(`/backups/providers/${id}/test`); },
+  getBackupPlans() { return this.get('/backups/plans'); },
+  createBackupPlan(data) { return this.post('/backups/plans', data); },
+  updateBackupPlan(id, data) { return this.put(`/backups/plans/${id}`, data); },
+  deleteBackupPlan(id) { return this.del(`/backups/plans/${id}`); },
+  runBackupPlan(id) { return this.post(`/backups/plans/${id}/run`); },
+  getBackupTasks(limit = 50) { return this.get(`/backups/tasks?limit=${limit}`); },
+  getBackupTask(id) { return this.get(`/backups/tasks/${id}`); },
 
   // System
   getSystemInfo() { return this.get('/system/info'); },

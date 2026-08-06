@@ -37,28 +37,32 @@ const Projects = {
         <tbody>${projects.map(p => `
           <tr data-project-id="${p.id}">
             <td><a href="#" onclick="Projects.showDetail(${p.id});return false">${esc(p.name)}</a></td>
-            <td><span class="badge badge-${p.status}">${esc(I18n.t(`status.${p.status}`) || p.status)}</span></td>
+            <td>
+              <span class="badge badge-${p.status}">${esc(I18n.t(`status.${p.status}`) || p.status)}</span>
+              ${p.last_operation_status === 'failed' ? `<div class="table-subtext error-text" title="${esc(p.last_operation_summary || '')}">最近操作失败</div>` : ''}
+            </td>
             <td>${esc(p.git_branch)}</td>
             <td>
               ${p.commit_hash ? `<span class="commit-sha">${esc(p.commit_hash.substring(0,7))}</span>` : '<span class="text-muted">-</span>'}
               ${p.update_available ? `<span class="badge badge-update" data-i18n="project.updateAvailable">有更新</span>` : ''}
             </td>
-            <td>
-              <span class="row-actions" data-project-actions="${p.id}">
-                ${p.update_available ? `<button class="btn btn-sm btn-update" data-action="update" onclick="Projects.updateProject(${p.id})" data-i18n="project.update">更新</button>` : ''}
-                <button class="btn btn-sm" data-action="deploy" onclick="Projects.deploy(${p.id})" data-i18n="project.deploy">部署</button>
-                <button class="btn btn-sm" data-action="rebuild" onclick="Projects.rebuild(${p.id})" data-i18n="project.rebuild">重构</button>
-                <button class="btn btn-sm" data-action="stop" onclick="Projects.stop(${p.id})" data-i18n="project.stop">停止</button>
-                <button class="btn btn-sm" data-action="detail" onclick="Projects.showDetail(${p.id})" data-i18n="project.detail">详情</button>
-                <button class="btn btn-sm btn-danger" data-action="delete" onclick="Projects.remove(${p.id})" data-i18n="project.delete">删除</button>
-              </span>
+            <td class="action-cell" data-project-actions="${p.id}">
+              ${App.actionMenu([
+                { label: I18n.t('project.update') || '更新', icon: '↥', visible: !!p.update_available, onclick: `Projects.updateProject(${p.id})` },
+                { label: I18n.t('project.deploy') || '部署', icon: '▶', onclick: `Projects.deploy(${p.id})` },
+                { label: I18n.t('project.rebuild') || '重构', icon: '↻', onclick: `Projects.rebuild(${p.id})` },
+                { label: I18n.t('project.stop') || '停止', icon: '■', onclick: `Projects.stop(${p.id})` },
+                { label: I18n.t('project.detail') || '详情', icon: '⌕', onclick: `Projects.showDetail(${p.id})` },
+                { label: '复制最近失败诊断', icon: '⧉', visible: !!p.last_failure_id, onclick: `Projects.copyLatestError(${p.id})` },
+                { label: I18n.t('project.delete') || '删除', icon: '×', danger: true, onclick: `Projects.remove(${p.id})` }
+              ])}
             </td>
           </tr>
         `).join('')}</tbody>
       </table>`;
       I18n.apply();
     } catch (err) {
-      Notify.error(err.message);
+      App.showApiError(err, '加载项目列表失败');
     }
   },
 
@@ -172,7 +176,8 @@ const Projects = {
       Notify.success(I18n.t('project.created') || 'Project created');
       this.loadList();
     } catch (err) {
-      Notify.error(err.message);
+      App.showApiError(err, '创建项目失败');
+      this.loadList();
     }
   },
 
@@ -225,7 +230,7 @@ const Projects = {
       Notify.success(I18n.t('project.deploySuccess') || 'Deployed');
       this.loadList();
     } catch (err) {
-      Notify.error(err.message);
+      App.showApiError(err, '部署失败');
       this.loadList();
     } finally {
       // Refresh deploy log if the detail modal is currently open for this project
@@ -255,7 +260,7 @@ const Projects = {
       Notify.success(I18n.t('project.updateSuccess') || 'Project updated');
       this.loadList();
     } catch (err) {
-      Notify.error(err.message);
+      App.showApiError(err, '更新项目失败');
       this.loadList();
     }
   },
@@ -276,7 +281,7 @@ const Projects = {
       Notify.success(I18n.t('project.rebuildSuccess') || 'Rebuilt successfully');
       this.loadList();
     } catch (err) {
-      Notify.error(err.message);
+      App.showApiError(err, '重构失败');
       this.loadList();
     }
   },
@@ -323,7 +328,7 @@ const Projects = {
       this.loadList();
       return updated;
     } catch (err) {
-      Notify.error(err.message);
+      App.showApiError(err, '检查项目更新失败');
     }
   },
 
@@ -333,7 +338,7 @@ const Projects = {
       Notify.success(I18n.t('project.stopped') || 'Stopped');
       this.loadList();
     } catch (err) {
-      Notify.error(err.message);
+      App.showApiError(err, '停止项目失败');
     }
   },
 
@@ -344,7 +349,16 @@ const Projects = {
       Notify.success(I18n.t('project.deleted') || 'Deleted');
       this.loadList();
     } catch (err) {
-      Notify.error(err.message);
+      App.showApiError(err, '删除项目失败');
+    }
+  },
+
+  async copyLatestError(id) {
+    try {
+      const result = await API.getProjectErrorReport(id);
+      await App.copyText(result.report, '项目诊断报告已复制');
+    } catch (err) {
+      App.showApiError(err, '读取项目诊断失败');
     }
   },
 
@@ -371,6 +385,15 @@ const Projects = {
       const remoteShort = project.remote_commit ? project.remote_commit.substring(0, 7) : '';
 
       const content = `
+        <div class="project-detail-hero">
+          <div>
+            <span class="badge badge-${project.status}">${esc(I18n.t(`status.${project.status}`) || project.status)}</span>
+            <strong>${esc(project.name)}</strong>
+            <small>${esc(project.git_branch)} · ${esc(commitShort)}</small>
+          </div>
+          <button class="btn btn-sm" type="button" onclick="Modal.close();App.navigate('backups')">打开备份中心</button>
+        </div>
+        <div id="projectResourceSummary" class="resource-summary loading-inline">正在关联容器、镜像与挂载卷…</div>
         <div class="form-group">
           <label data-i18n="project.name">名称</label>
           <input type="text" id="detailName" value="${esc(project.name)}">
@@ -431,11 +454,11 @@ const Projects = {
           <textarea id="envEditor" rows="8" placeholder="KEY=VALUE&#10;PORT=3000&#10;DB_HOST=localhost">${esc(envText)}</textarea>
         </div>
         <div class="form-group">
-          <label data-i18n="project.deployLog">部署日志</label>
+          <div class="log-toolbar"><label data-i18n="project.deployLog">部署日志</label><button class="btn btn-sm" type="button" id="copyDeployLogBtn">复制</button></div>
           <div class="log-viewer" id="projectDeployLog">${I18n.t('common.loading') || 'Loading...'}</div>
         </div>
         <div class="form-group">
-          <label data-i18n="project.failedContainerLogs">失败时的容器日志</label>
+          <div class="log-toolbar"><label data-i18n="project.failedContainerLogs">失败时的容器日志</label><button class="btn btn-sm" type="button" id="copyFailedLogsBtn">复制</button></div>
           <div class="log-viewer-toolbar">
             <button class="btn btn-sm" id="captureFailedLogsBtn" data-i18n="project.captureFailedLogs">重新捕获容器日志</button>
             <span class="log-viewer-hint" id="captureFailedLogsHint" data-i18n="project.captureFailedLogsHint">仅捕获当前残留的容器日志（部署失败后的容器可能已被自动清理）</span>
@@ -443,8 +466,12 @@ const Projects = {
           <div class="log-viewer" id="projectFailedContainerLogs">${I18n.t('common.loading') || 'Loading...'}</div>
         </div>
         <div class="form-group">
-          <label data-i18n="project.logs">日志</label>
+          <div class="log-toolbar"><label data-i18n="project.logs">日志</label><button class="btn btn-sm" type="button" id="copyRuntimeLogsBtn">复制</button></div>
           <div class="log-viewer" id="projectLogs">${I18n.t('common.loading') || 'Loading...'}</div>
+        </div>
+        <div class="form-group">
+          <div class="log-toolbar"><label>操作历史</label>${project.last_failure_id ? `<button class="btn btn-sm" type="button" onclick="Projects.copyLatestError(${project.id})">复制最近失败诊断</button>` : ''}</div>
+          <div id="projectOperationTimeline" class="operation-timeline"><div class="loading-inline">正在加载操作记录…</div></div>
         </div>
       `;
 
@@ -458,6 +485,52 @@ const Projects = {
         document.getElementById('detailManualTokenGroup').style.display =
           e.target.value === '__manual__' ? 'block' : 'none';
       });
+
+      const copyPanel = (buttonId, panelId, message) => {
+        document.getElementById(buttonId)?.addEventListener('click', () => {
+          const text = document.getElementById(panelId)?.textContent || '';
+          App.copyText(text, message);
+        });
+      };
+      copyPanel('copyDeployLogBtn', 'projectDeployLog', '部署日志已复制');
+      copyPanel('copyFailedLogsBtn', 'projectFailedContainerLogs', '失败日志已复制');
+      copyPanel('copyRuntimeLogsBtn', 'projectLogs', '运行日志已复制');
+
+      try {
+        const resources = await API.getProjectResources(id);
+        const resourceEl = document.getElementById('projectResourceSummary');
+        if (resourceEl) {
+          const volumeNames = (resources.volumes || []).map(item => item.name);
+          resourceEl.classList.remove('loading-inline');
+          resourceEl.innerHTML = `
+            <div class="resource-summary-item"><span>容器</span><strong>${(resources.containers || []).length}</strong><small>${(resources.containers || []).map(c => esc(((c.Names || [c.Id])[0] || '').replace(/^\//, ''))).join(', ') || '尚未部署'}</small></div>
+            <div class="resource-summary-item"><span>镜像</span><strong>${(resources.images || []).length}</strong><small>${(resources.images || []).map(image => esc(image.name || image.id.substring(0, 12))).join(', ') || '无'}</small></div>
+            <div class="resource-summary-item"><span>命名卷</span><strong>${volumeNames.length}</strong><small>${volumeNames.map(esc).join(', ') || '无'}</small></div>
+            <div class="resource-summary-item"><span>目录挂载</span><strong>${(resources.bind_mounts || []).length}</strong><small>${(resources.bind_mounts || []).map(item => esc(item.destination)).join(', ') || '无'}</small></div>`;
+        }
+      } catch (err) {
+        const resourceEl = document.getElementById('projectResourceSummary');
+        if (resourceEl) {
+          resourceEl.classList.remove('loading-inline');
+          resourceEl.innerHTML = `<div class="compact-empty">Docker 资源暂不可用：${esc(err.message || '读取超时')}</div>`;
+        }
+      }
+
+      try {
+        const operations = await API.getProjectOperations(id, 12);
+        const timeline = document.getElementById('projectOperationTimeline');
+        if (timeline) {
+          timeline.innerHTML = operations.length ? operations.map(operation => `
+            <div class="operation-row ${operation.status}">
+              <span class="operation-dot"></span>
+              <div><strong>${esc(operation.action)}</strong><small>${esc(operation.summary || operation.status)}</small></div>
+              <time>${esc(operation.finished_at || operation.started_at || '')}</time>
+            </div>`).join('') : '<div class="compact-empty">暂无操作记录</div>';
+        }
+      } catch (err) {
+        const timeline = document.getElementById('projectOperationTimeline');
+        if (timeline) timeline.innerHTML = `<div class="compact-empty">操作记录读取失败：${esc(err.message)}</div>`;
+      }
 
       try {
         const deployLogResp = await API.getProjectDeployLog(id);
@@ -528,10 +601,13 @@ const Projects = {
           const entries = Object.entries(logs);
           logEl.textContent = entries.length ? entries.map(([n, l]) => `=== ${n} ===\n${l}`).join('\n\n') : I18n.t('project.noLogs') || 'No logs available';
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        const logEl = document.getElementById('projectLogs');
+        if (logEl) logEl.textContent = `运行日志暂不可用：${err.message}`;
+      }
 
     } catch (err) {
-      Notify.error(err.message);
+      App.showApiError(err, '读取项目详情失败');
     }
   },
 
@@ -576,7 +652,7 @@ const Projects = {
       Notify.success(I18n.t('common.saved') || 'Saved');
       this.loadList();
     } catch (err) {
-      Notify.error(err.message);
+      App.showApiError(err, '保存项目失败');
     }
   }
 };

@@ -8,6 +8,7 @@ const App = {
     '/projects': 'project',
     '/containers': 'containers',
     '/images': 'images',
+    '/backups': 'backups',
     '/tokens': 'tokens',
     '/settings': 'settings'
   },
@@ -17,6 +18,7 @@ const App = {
     project: '/project',
     containers: '/containers',
     images: '/images',
+    backups: '/backups',
     tokens: '/tokens',
     settings: '/settings'
   },
@@ -81,6 +83,7 @@ const App = {
     document.querySelectorAll('#langSelect').forEach(sel => {
       sel.addEventListener('change', async (e) => {
         await I18n.setLang(e.target.value);
+        this.navigate(this.currentPage, { silent: true });
       });
     });
 
@@ -89,8 +92,13 @@ const App = {
       document.getElementById('userMenuDropdown').classList.toggle('open');
     });
 
-    document.addEventListener('click', () => {
+    document.addEventListener('click', (event) => {
       document.getElementById('userMenuDropdown').classList.remove('open');
+      const clickedMenuItem = event.target.closest('.action-menu-item');
+      if (clickedMenuItem) clickedMenuItem.closest('details.action-menu')?.removeAttribute('open');
+      document.querySelectorAll('details.action-menu[open]').forEach(menu => {
+        if (!menu.contains(event.target)) menu.removeAttribute('open');
+      });
     });
 
     document.getElementById('logoutBtn').addEventListener('click', () => {
@@ -137,7 +145,9 @@ const App = {
       item.classList.toggle('active', item.getAttribute('data-page') === page);
     });
 
-    document.getElementById('pageTitle').textContent = I18n.t(`nav.${page}`) || page;
+    const pageTitle = document.getElementById('pageTitle');
+    pageTitle.setAttribute('data-i18n', `nav.${page}`);
+    pageTitle.textContent = I18n.t(`nav.${page}`) || page;
 
     const container = document.getElementById('contentArea');
     container.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
@@ -157,12 +167,83 @@ const App = {
           container.innerHTML = '<div class="empty-state"><p>Images module not loaded.</p></div>';
         }
         break;
+      case 'backups': Backups.render(container); break;
       case 'tokens': Tokens.render(container); break;
       case 'settings': Settings.render(container); break;
       default:
         // Unknown page — fall back to dashboard
         Dashboard.render(container);
     }
+  },
+
+  actionMenu(items, label = '操作') {
+    const visible = (items || []).filter(item => item && item.visible !== false);
+    return `
+      <details class="action-menu">
+        <summary aria-label="${this.escapeHtml(label)}" title="${this.escapeHtml(label)}">•••</summary>
+        <div class="action-menu-popover">
+          ${visible.map(item => `
+            <button type="button" class="action-menu-item ${item.danger ? 'danger' : ''}"
+              ${item.disabled ? 'disabled' : ''}
+              onclick="${item.onclick};this.closest('details').removeAttribute('open')">
+              ${item.icon ? `<span class="action-menu-icon">${item.icon}</span>` : ''}
+              <span>${this.escapeHtml(item.label)}</span>
+            </button>
+          `).join('')}
+        </div>
+      </details>`;
+  },
+
+  escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  },
+
+  async copyText(value, successMessage) {
+    const text = String(value == null ? '' : value);
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      }
+      Notify.success(successMessage || '已复制到剪贴板');
+      return true;
+    } catch (err) {
+      Notify.error(`复制失败：${err.message}`);
+      return false;
+    }
+  },
+
+  showApiError(error, context = '操作失败') {
+    const report = error && error.report
+      ? error.report
+      : `# Jewel diagnostic report\n\nContext: ${context}\nError: ${(error && error.message) || 'Unknown error'}`;
+    Modal.show(context, `
+      <div class="error-summary">
+        <span class="error-summary-icon">!</span>
+        <div>
+          <strong>${this.escapeHtml((error && error.message) || 'Unknown error')}</strong>
+          ${error && error.operationId ? `<div class="text-muted">Operation #${error.operationId}</div>` : ''}
+        </div>
+      </div>
+      <p class="modal-desc">下方诊断报告已自动隐藏常见令牌与密码，可直接复制发送给 AI。</p>
+      <pre class="diagnostic-report" id="apiErrorReport">${this.escapeHtml(report)}</pre>
+    `, [
+      { label: '关闭', class: 'btn-secondary' },
+      { label: '复制诊断报告', class: 'btn-primary', onClick: () => this.copyText(report, '诊断报告已复制') }
+    ]);
   },
 
   showChangePasswordModal() {

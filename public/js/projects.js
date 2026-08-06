@@ -48,6 +48,7 @@ const Projects = {
             </td>
             <td class="action-cell" data-project-actions="${p.id}">
               ${App.actionMenu([
+                { label: I18n.t('project.checkUpdate') || '检查更新', icon: '⌕', onclick: `Projects.checkUpdate(${p.id}, true)` },
                 { label: I18n.t('project.update') || '更新', icon: '↥', visible: !!p.update_available, onclick: `Projects.updateProject(${p.id})` },
                 { label: I18n.t('project.deploy') || '部署', icon: '▶', onclick: `Projects.deploy(${p.id})` },
                 { label: I18n.t('project.rebuild') || '重构', icon: '↻', onclick: `Projects.rebuild(${p.id})` },
@@ -316,7 +317,7 @@ const Projects = {
     } catch { /* ignore */ }
   },
 
-  async checkUpdate(id) {
+  async checkUpdate(id, revealUpdateAction = false) {
     try {
       Notify.info(I18n.t('project.checkUpdate') || 'Checking for updates...');
       const updated = await API.checkProjectUpdate(id);
@@ -325,7 +326,13 @@ const Projects = {
       } else {
         Notify.success(I18n.t('project.upToDate') || 'Up to date');
       }
-      this.loadList();
+      // Refresh the current row so a newly available "更新" action is
+      // immediately shown in the same 操作 menu.
+      await this.loadList();
+      if (revealUpdateAction && updated.update_available) {
+        const menu = document.querySelector(`tr[data-project-id="${id}"] details.action-menu`);
+        if (menu) menu.setAttribute('open', '');
+      }
       return updated;
     } catch (err) {
       App.showApiError(err, '检查项目更新失败');

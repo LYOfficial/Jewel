@@ -66,7 +66,13 @@ const API = {
       const msg = snippet
         ? `Request failed (HTTP ${res.status}): ${snippet}`
         : `Request failed (HTTP ${res.status})`;
-      throw new Error(msg);
+      const error = new Error(msg);
+      // A reverse proxy can time out a long-running deployment while the
+      // Jewel server continues the operation in the background. Preserve the
+      // HTTP status so callers can reconcile that operation instead of
+      // incorrectly treating it as a deployment failure.
+      error.status = res.status;
+      throw error;
     }
 
     if (!res.ok) {

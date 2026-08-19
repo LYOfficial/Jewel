@@ -94,6 +94,8 @@
   "project.delete": "刪除",
   "project.deploying": "部署中...",
   "project.deploySuccess": "部署成功",
+  "project.confirmingDeploy": "代理請求逾時，正在確認部署狀態…",
+  "project.deployStillRunning": "代理請求已逾時，但 Jewel 中的部署仍在繼續。請稍後重新整理查看結果。",
   "project.stopped": "已停止",
   "project.deleted": "已刪除",
   "project.created": "專案已建立",

@@ -94,6 +94,8 @@
   "project.delete": "Delete",
   "project.deploying": "Deploying...",
   "project.deploySuccess": "Deployed successfully",
+  "project.confirmingDeploy": "The proxy timed out; confirming deployment status...",
+  "project.deployStillRunning": "The proxy request timed out, but deployment is still running in Jewel. Refresh later to check its result.",
   "project.stopped": "Stopped",
   "project.deleted": "Deleted",
   "project.created": "Project created",

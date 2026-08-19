@@ -6,9 +6,11 @@ const vm = require('vm');
 
 const projectsSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'projects.js'), 'utf8');
 
-function createProjectsHarness(initialProject) {
+function createProjectsHarness(initialProject, options = {}) {
   let project = { ...initialProject };
   let checkCalls = 0;
+  let operationCalls = 0;
+  let shownError = null;
   const actionMenus = [];
   const notifications = [];
   const projectsList = { innerHTML: '' };
@@ -22,6 +24,14 @@ function createProjectsHarness(initialProject) {
   const sandbox = {
     API: {
       getProjects: async () => [project],
+      deployProject: async () => {
+        if (options.deployError) throw options.deployError;
+        return { message: 'Deployed successfully' };
+      },
+      getProjectOperations: async () => {
+        operationCalls += 1;
+        return options.operations || [];
+      },
       checkProjectUpdate: async (id) => {
         checkCalls += 1;
         project = { ...project, id, update_available: 1 };
@@ -53,7 +63,7 @@ function createProjectsHarness(initialProject) {
         actionMenus.push(items.map((item) => ({ ...item })));
         return '<div class="action-menu"></div>';
       },
-      showApiError: (err) => { throw err; }
+      showApiError: (err) => { shownError = err; }
     },
     Notify: {
       info: (message) => notifications.push(message),
@@ -76,7 +86,9 @@ function createProjectsHarness(initialProject) {
     actionMenus,
     notifications,
     get actionMenuOpen() { return projectActionMenu.open; },
-    get checkCalls() { return checkCalls; }
+    get checkCalls() { return checkCalls; },
+    get operationCalls() { return operationCalls; },
+    get shownError() { return shownError; }
   };
 }
 
@@ -117,4 +129,18 @@ test('checking an update refreshes the action menu with update available', async
   assert.equal(checkUpdate.onclick, 'Projects.checkUpdate(42, true)');
   assert.equal(update.visible, true);
   assert.equal(harness.actionMenuOpen, true);
+});
+
+test('a proxy 504 during project update is reconciled with a successful deploy operation', async () => {
+  const proxyTimeout = Object.assign(new Error('Request failed (HTTP 504)'), { status: 504 });
+  const harness = createProjectsHarness(project, {
+    deployError: proxyTimeout,
+    operations: [{ action: 'deploy', status: 'succeeded' }]
+  });
+
+  await harness.Projects.updateProject(project.id);
+
+  assert.equal(harness.operationCalls, 1);
+  assert.equal(harness.shownError, null);
+  assert.ok(harness.notifications.includes('project.updateSuccess'));
 });

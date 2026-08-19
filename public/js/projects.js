@@ -231,6 +231,17 @@ const Projects = {
       Notify.success(I18n.t('project.deploySuccess') || 'Deployed');
       this.loadList();
     } catch (err) {
+      const state = await this.reconcileGatewayTimedOutDeploy(id, err);
+      if (state === 'succeeded') {
+        Notify.success(I18n.t('project.deploySuccess') || 'Deployed');
+        this.loadList();
+        return;
+      }
+      if (state === 'pending') {
+        Notify.info(I18n.t('project.deployStillRunning') || 'The request timed out at the proxy, but deployment is still running in Jewel. Refresh later to check its result.');
+        this.loadList();
+        return;
+      }
       App.showApiError(err, '部署失败');
       this.loadList();
     } finally {
@@ -261,9 +272,46 @@ const Projects = {
       Notify.success(I18n.t('project.updateSuccess') || 'Project updated');
       this.loadList();
     } catch (err) {
+      const state = await this.reconcileGatewayTimedOutDeploy(id, err);
+      if (state === 'succeeded') {
+        Notify.success(I18n.t('project.updateSuccess') || 'Project updated');
+        this.loadList();
+        return;
+      }
+      if (state === 'pending') {
+        Notify.info(I18n.t('project.deployStillRunning') || 'The request timed out at the proxy, but deployment is still running in Jewel. Refresh later to check its result.');
+        this.loadList();
+        return;
+      }
       App.showApiError(err, '更新项目失败');
       this.loadList();
     }
+  },
+
+  // OpenResty (or another reverse proxy) may return 504 before a Compose
+  // build finishes. The HTTP connection is gone, but the server-side async
+  // route keeps running. Check the persisted operation record before showing
+  // a failure notification so a successful deployment is not misreported.
+  async reconcileGatewayTimedOutDeploy(id, err) {
+    if (!err || Number(err.status) !== 504) return 'not-applicable';
+
+    Notify.info(I18n.t('project.confirmingDeploy') || 'The proxy timed out; confirming deployment status...');
+    const deadline = Date.now() + 5 * 60 * 1000;
+    while (Date.now() < deadline) {
+      try {
+        const operations = await API.getProjectOperations(id, 1);
+        const operation = operations && operations[0];
+        if (operation && operation.action === 'deploy') {
+          if (operation.status === 'succeeded') return 'succeeded';
+          if (operation.status === 'failed') return 'failed';
+        }
+      } catch {
+        // The proxy may still be recovering. Keep checking until the window
+        // expires rather than converting a transport timeout into a failure.
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    return 'pending';
   },
 
   async rebuild(id) {

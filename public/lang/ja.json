@@ -94,6 +94,8 @@
   "project.delete": "削除",
   "project.deploying": "デプロイ中...",
   "project.deploySuccess": "デプロイ成功",
+  "project.confirmingDeploy": "プロキシがタイムアウトしました。デプロイ状態を確認しています…",
+  "project.deployStillRunning": "プロキシ要求はタイムアウトしましたが、Jewel ではデプロイが継続中です。しばらくしてから更新して結果を確認してください。",
   "project.stopped": "停止しました",
   "project.deleted": "削除しました",
   "project.created": "プロジェクトを作成しました",

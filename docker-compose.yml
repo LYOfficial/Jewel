@@ -4,6 +4,7 @@ services:
       context: .
       args:
         JEWEL_COMMIT: ${JEWEL_COMMIT:-unknown}
+        NODE_IMAGE: ${JEWEL_NODE_IMAGE:-node:20-alpine}
     image: jewel:latest
     container_name: jewel
     labels:

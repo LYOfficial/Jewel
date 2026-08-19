@@ -115,6 +115,34 @@ fi
 DATA_SOURCE="${JEWEL_DATA_SOURCE:-${EXISTING_DATA_SOURCE:-$DEFAULT_DATA_SOURCE}}"
 DOCKER_READ_TIMEOUT_VALUE="${DOCKER_READ_TIMEOUT_MS:-${EXISTING_DOCKER_TIMEOUT:-8000}}"
 BACKUP_HELPER_IMAGE_VALUE="${BACKUP_HELPER_IMAGE:-${EXISTING_BACKUP_HELPER:-busybox:1.36}}"
+# DaoCloud mirrors Docker Hub and is generally reachable from mainland China.
+# Set JEWEL_NODE_IMAGE to override it with an internal registry if needed.
+NODE_IMAGE="${JEWEL_NODE_IMAGE:-docker.m.daocloud.io/library/node:20-alpine}"
+IMAGE_PULL_RETRIES="${JEWEL_IMAGE_PULL_RETRIES:-3}"
+
+case "$IMAGE_PULL_RETRIES" in
+  ''|*[!0-9]*|0)
+    echo "Error: JEWEL_IMAGE_PULL_RETRIES must be a positive integer." >&2
+    exit 1
+    ;;
+esac
+
+pull_image_with_retry() {
+  ATTEMPT=1
+  while [ "$ATTEMPT" -le "$IMAGE_PULL_RETRIES" ]; do
+    echo "==> Pulling base image ${NODE_IMAGE} (attempt ${ATTEMPT}/${IMAGE_PULL_RETRIES})..."
+    if docker pull "$NODE_IMAGE"; then
+      return 0
+    fi
+    if [ "$ATTEMPT" -lt "$IMAGE_PULL_RETRIES" ]; then
+      WAIT_SECONDS=$((ATTEMPT * 5))
+      echo "==> Base image pull failed; retrying in ${WAIT_SECONDS}s..." >&2
+      sleep "$WAIT_SECONDS"
+    fi
+    ATTEMPT=$((ATTEMPT + 1))
+  done
+  return 1
+}
 
 echo "==> Jewel installer"
 echo "    Repository: ${REPO} (${BRANCH})"
@@ -126,8 +154,13 @@ git clone --depth 1 --branch "$BRANCH" "$REPO" "$WORK_DIR"
 COMMIT="$(cd "$WORK_DIR" && git rev-parse HEAD)"
 
 echo "==> Building candidate image (the current Jewel container is still running)..."
+if ! pull_image_with_retry; then
+  echo "Error: unable to pull base image ${NODE_IMAGE}. Check Docker Hub connectivity or set JEWEL_NODE_IMAGE to an accessible registry mirror." >&2
+  exit 1
+fi
 docker build \
   --build-arg "JEWEL_COMMIT=${COMMIT}" \
+  --build-arg "NODE_IMAGE=${NODE_IMAGE}" \
   -t "$CANDIDATE_IMAGE" \
   "$WORK_DIR"
 

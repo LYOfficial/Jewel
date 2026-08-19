@@ -217,6 +217,8 @@ Jewel 会检查 GitHub `main` 分支是否存在更新，但不会自动安装�
 | `JEWEL_DATA_SOURCE` | `jewel-data` | Docker 卷名或绝对宿主机目录 |
 | `JEWEL_REPOSITORY` | 官方 GitHub 仓库 | 安装器克隆地址 |
 | `JEWEL_BRANCH` | `main` | 安装器克隆的分支或标签 |
+| `JEWEL_NODE_IMAGE` | `node:20-alpine` | Jewel 构建使用的 Node 基础镜像；Docker Hub 不可达时可指定可访问的镜像仓库地址 |
+| `JEWEL_IMAGE_PULL_RETRIES` | `3` | 安装器拉取基础镜像的最大尝试次数 |
 
 ### 持久化数据
 

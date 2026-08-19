@@ -1,4 +1,5 @@
-FROM node:20-alpine
+ARG NODE_IMAGE=node:20-alpine
+FROM ${NODE_IMAGE}
 
 RUN apk add --no-cache git docker-cli docker-cli-compose rclone python3 py3-pip \
     && pip3 install --no-cache-dir --break-system-packages anyshare-unofficial bypy

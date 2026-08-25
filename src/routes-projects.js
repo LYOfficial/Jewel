@@ -9,6 +9,12 @@ const projectUpdateService = require('./project-update-service');
 const operationService = require('./operation-service');
 const { redactSecrets, tailLines } = require('./diagnostics');
 const backupService = require('./backup-service');
+const {
+  containerName,
+  collectContainerMounts,
+  mergeNamedVolumes,
+  summarizeContainerStats
+} = require('./project-resource-utils');
 
 const router = express.Router();
 
@@ -364,26 +370,99 @@ router.get('/:id/resources', async (req, res) => {
       dockerService.getProjectContainers(project.name),
       'Reading project containers'
     );
-    const volumes = await withDockerReadTimeout(
+    const knownVolumes = await withDockerReadTimeout(
       backupService.getProjectVolumeResources(project, containers),
       'Reading project volumes'
     );
-    const bindMounts = [];
+    const detailedContainers = await Promise.all(containers.map(async container => {
+      try {
+        const info = await withDockerReadTimeout(
+          dockerService.getContainerInfo(container.Id),
+          `Reading mounts for ${containerName(container) || container.Id}`
+        );
+        return { container, info };
+      } catch {
+        // Retain the summary data when a container disappears between list
+        // and inspect, or when a single inspect request times out.
+        return { container, info: null };
+      }
+    }));
+    const mountedResources = collectContainerMounts(detailedContainers);
+    const volumes = mergeNamedVolumes(knownVolumes, mountedResources.volumes, project);
     const imageMap = new Map();
     for (const container of containers) {
-      const containerName = ((container.Names && container.Names[0]) || container.Id).replace(/^\//, '');
+      const name = containerName(container);
       const imageKey = container.ImageID || container.Image;
       if (imageKey && !imageMap.has(imageKey)) {
-        imageMap.set(imageKey, { id: container.ImageID || '', name: container.Image || '', containers: [] });
+        imageMap.set(imageKey, { id: container.ImageID || '', name: container.Image || '', containers: [], size_bytes: 0 });
       }
-      if (imageKey) imageMap.get(imageKey).containers.push(containerName);
-      for (const mount of container.Mounts || []) {
-        if (mount.Type === 'bind') {
-          bindMounts.push({ source: mount.Source, destination: mount.Destination, container: containerName });
-        }
-      }
+      if (imageKey) imageMap.get(imageKey).containers.push(name);
     }
-    res.json({ containers, images: [...imageMap.values()], volumes, bind_mounts: bindMounts });
+
+    const dockerClient = dockerService.getDocker();
+    const diskUsagePromise = typeof dockerClient.df === 'function'
+      ? withDockerReadTimeout(dockerClient.df(), 'Reading Docker disk usage')
+      : Promise.resolve({});
+    const [imagesResult, diskUsageResult, statsResult] = await Promise.allSettled([
+      withDockerReadTimeout(dockerClient.listImages({ all: true }), 'Reading Docker images'),
+      diskUsagePromise,
+      Promise.all(containers.filter(container => container.State === 'running').map(async container => {
+        try {
+          return await withDockerReadTimeout(
+            dockerService.getContainerStats(container.Id),
+            `Reading stats for ${containerName(container) || container.Id}`
+          );
+        } catch {
+          return null;
+        }
+      }))
+    ]);
+
+    const dockerImages = imagesResult.status === 'fulfilled' ? imagesResult.value : [];
+    const imageById = new Map(dockerImages.map(image => [image.Id, image]));
+    const imageByTag = new Map();
+    for (const image of dockerImages) {
+      for (const tag of image.RepoTags || []) imageByTag.set(tag, image);
+    }
+    for (const image of imageMap.values()) {
+      const dockerImage = imageById.get(image.id) || imageByTag.get(image.name);
+      image.size_bytes = Number(dockerImage && dockerImage.Size) || 0;
+    }
+
+    const diskUsage = diskUsageResult.status === 'fulfilled' ? diskUsageResult.value : {};
+    const volumeSizeByName = new Map(((diskUsage && diskUsage.Volumes) || []).map(volume => [
+      volume.Name,
+      Number(volume.UsageData && volume.UsageData.Size) || 0
+    ]));
+    for (const volume of volumes) volume.size_bytes = volumeSizeByName.get(volume.name) || 0;
+
+    const stats = summarizeContainerStats(statsResult.status === 'fulfilled' ? statsResult.value : []);
+    const imageBytes = [...imageMap.values()].reduce((total, image) => total + image.size_bytes, 0);
+    const writableLayerBytes = containers.reduce((total, container) => total + (Number(container.SizeRw) || 0), 0);
+    const volumeBytes = volumes.reduce((total, volume) => total + volume.size_bytes, 0);
+    res.json({
+      containers,
+      images: [...imageMap.values()],
+      volumes,
+      bind_mounts: mountedResources.bindMounts,
+      storage: {
+        total_bytes: imageBytes + writableLayerBytes + volumeBytes,
+        image_bytes: imageBytes,
+        writable_layer_bytes: writableLayerBytes,
+        volume_bytes: volumeBytes,
+        bind_mounts_included: false
+      },
+      cpu: {
+        percent: stats.cpu_percent,
+        running_containers: containers.filter(container => container.State === 'running').length,
+        unavailable_containers: stats.unavailable_containers
+      },
+      memory: {
+        usage_bytes: stats.memory_bytes,
+        limit_bytes: stats.memory_limit_bytes,
+        percent: stats.memory_percent
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

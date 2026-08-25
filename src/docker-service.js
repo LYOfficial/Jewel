@@ -577,7 +577,9 @@ async function stopProject(project) {
 }
 
 async function getProjectContainers(projectName) {
-  const containers = await listContainers(true);
+  // Request writable-layer sizes alongside the regular summary so project
+  // dashboards can report the storage consumed by their containers.
+  const containers = await getDocker().listContainers({ all: true, size: true });
   return containers.filter(c =>
     c.Labels && c.Labels['com.docker.compose.project'] === projectName
   );

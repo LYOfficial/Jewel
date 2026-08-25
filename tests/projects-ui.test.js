@@ -103,6 +103,15 @@ const project = {
   last_failure_id: null
 };
 
+test('project details split the dashboard from deployment configuration', () => {
+  assert.match(projectsSource, /data-project-detail-tab="dashboard"/);
+  assert.match(projectsSource, /data-project-detail-tab="deploy"/);
+  assert.match(projectsSource, /data-project-detail-panel="dashboard"/);
+  assert.match(projectsSource, /data-project-detail-panel="deploy"/);
+  assert.match(projectsSource, /projectMetricSummary/);
+  assert.match(projectsSource, /loadDashboardResources/);
+});
+
 test('project action menu always includes check update', async () => {
   const harness = createProjectsHarness(project);
 

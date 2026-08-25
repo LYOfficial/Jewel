@@ -440,6 +440,11 @@ const Projects = {
       const remoteShort = project.remote_commit ? project.remote_commit.substring(0, 7) : '';
 
       const content = `
+        <div class="project-detail-tabs" role="tablist" aria-label="${esc(I18n.t('project.detail') || '项目详情')}">
+          <button class="project-detail-tab active" type="button" role="tab" aria-selected="true" data-project-detail-tab="dashboard">${esc(I18n.t('project.dashboard') || '仪表盘')}</button>
+          <button class="project-detail-tab" type="button" role="tab" aria-selected="false" data-project-detail-tab="deploy">${esc(I18n.t('project.deployment') || '部署')}</button>
+        </div>
+        <section class="project-detail-panel" data-project-detail-panel="dashboard">
         <div class="project-detail-hero">
           <div>
             <span class="badge badge-${project.status}">${esc(I18n.t(`status.${project.status}`) || project.status)}</span>
@@ -448,7 +453,14 @@ const Projects = {
           </div>
           <button class="btn btn-sm" type="button" onclick="Modal.close();App.navigate('backups')">打开备份中心</button>
         </div>
-        <div id="projectResourceSummary" class="resource-summary loading-inline">正在关联容器、镜像与挂载卷…</div>
+        <div class="project-dashboard-toolbar">
+          <div><strong>${esc(I18n.t('project.resourceOverview') || '资源概览')}</strong><small>${esc(I18n.t('project.dashboardHint') || '实时汇总项目关联的 Docker 资源')}</small></div>
+          <button class="btn btn-sm" type="button" id="refreshProjectDashboard">${esc(I18n.t('common.refresh') || '刷新')}</button>
+        </div>
+        <div id="projectMetricSummary" class="project-metric-summary loading-inline">${esc(I18n.t('project.loadingDashboard') || '正在读取项目资源使用情况…')}</div>
+        <div id="projectResourceSummary" class="resource-summary loading-inline">${esc(I18n.t('project.loadingResources') || '正在关联容器、镜像与挂载卷…')}</div>
+        </section>
+        <section class="project-detail-panel" data-project-detail-panel="deploy" hidden>
         <div class="form-group">
           <label data-i18n="project.name">名称</label>
           <input type="text" id="detailName" value="${esc(project.name)}">
@@ -528,6 +540,7 @@ const Projects = {
           <div class="log-toolbar"><label>操作历史</label>${project.last_failure_id ? `<button class="btn btn-sm" type="button" onclick="Projects.copyLatestError(${project.id})">复制最近失败诊断</button>` : ''}</div>
           <div id="projectOperationTimeline" class="operation-timeline"><div class="loading-inline">正在加载操作记录…</div></div>
         </div>
+        </section>
       `;
 
       Modal.show(project.name, content, [
@@ -535,6 +548,12 @@ const Projects = {
         { label: I18n.t('common.save') || '保存', class: 'btn-primary', onClick: () => this.saveProject(project.id) }
       ]);
       I18n.apply();
+
+      document.querySelectorAll('[data-project-detail-tab]').forEach(tab => {
+        tab.addEventListener('click', () => this.setDetailTab(tab.dataset.projectDetailTab));
+      });
+      this.setDetailTab('dashboard');
+      document.getElementById('refreshProjectDashboard')?.addEventListener('click', () => this.loadDashboardResources(id));
 
       document.getElementById('detailTokenSelect').addEventListener('change', (e) => {
         document.getElementById('detailManualTokenGroup').style.display =
@@ -551,25 +570,7 @@ const Projects = {
       copyPanel('copyFailedLogsBtn', 'projectFailedContainerLogs', '失败日志已复制');
       copyPanel('copyRuntimeLogsBtn', 'projectLogs', '运行日志已复制');
 
-      try {
-        const resources = await API.getProjectResources(id);
-        const resourceEl = document.getElementById('projectResourceSummary');
-        if (resourceEl) {
-          const volumeNames = (resources.volumes || []).map(item => item.name);
-          resourceEl.classList.remove('loading-inline');
-          resourceEl.innerHTML = `
-            <div class="resource-summary-item"><span>容器</span><strong>${(resources.containers || []).length}</strong><small>${(resources.containers || []).map(c => esc(((c.Names || [c.Id])[0] || '').replace(/^\//, ''))).join(', ') || '尚未部署'}</small></div>
-            <div class="resource-summary-item"><span>镜像</span><strong>${(resources.images || []).length}</strong><small>${(resources.images || []).map(image => esc(image.name || image.id.substring(0, 12))).join(', ') || '无'}</small></div>
-            <div class="resource-summary-item"><span>命名卷</span><strong>${volumeNames.length}</strong><small>${volumeNames.map(esc).join(', ') || '无'}</small></div>
-            <div class="resource-summary-item"><span>目录挂载</span><strong>${(resources.bind_mounts || []).length}</strong><small>${(resources.bind_mounts || []).map(item => esc(item.destination)).join(', ') || '无'}</small></div>`;
-        }
-      } catch (err) {
-        const resourceEl = document.getElementById('projectResourceSummary');
-        if (resourceEl) {
-          resourceEl.classList.remove('loading-inline');
-          resourceEl.innerHTML = `<div class="compact-empty">Docker 资源暂不可用：${esc(err.message || '读取超时')}</div>`;
-        }
-      }
+      this.loadDashboardResources(id);
 
       try {
         const operations = await API.getProjectOperations(id, 12);
@@ -666,6 +667,85 @@ const Projects = {
     }
   },
 
+  setDetailTab(tabName) {
+    document.querySelectorAll('[data-project-detail-tab]').forEach(tab => {
+      const active = tab.dataset.projectDetailTab === tabName;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+    });
+    document.querySelectorAll('[data-project-detail-panel]').forEach(panel => {
+      panel.hidden = panel.dataset.projectDetailPanel !== tabName;
+    });
+    // The save action only applies to deployment configuration. Keeping it
+    // out of the dashboard prevents a misleading no-op action there.
+    const actions = document.querySelector('.modal .modal-actions');
+    if (actions) actions.hidden = tabName !== 'deploy';
+  },
+
+  async loadDashboardResources(id) {
+    const metricEl = document.getElementById('projectMetricSummary');
+    const resourceEl = document.getElementById('projectResourceSummary');
+    if (metricEl) {
+      metricEl.classList.add('loading-inline');
+      metricEl.textContent = I18n.t('project.loadingDashboard') || '正在读取项目资源使用情况…';
+    }
+    if (resourceEl) {
+      resourceEl.classList.add('loading-inline');
+      resourceEl.textContent = I18n.t('project.loadingResources') || '正在关联容器、镜像与挂载卷…';
+    }
+
+    try {
+      const resources = await API.getProjectResources(id);
+      const containers = resources.containers || [];
+      const images = resources.images || [];
+      const volumes = resources.volumes || [];
+      const bindMounts = resources.bind_mounts || [];
+      const storage = resources.storage || {};
+      const cpu = resources.cpu || {};
+      const memory = resources.memory || {};
+      const cpuPercent = Number(cpu.percent) || 0;
+      const memoryPercent = Number(memory.percent) || 0;
+      const cpuMeter = Math.min(100, Math.max(0, cpuPercent));
+      const memoryMeter = Math.min(100, Math.max(0, memoryPercent));
+
+      if (metricEl) {
+        metricEl.classList.remove('loading-inline');
+        metricEl.innerHTML = `
+          <article class="project-metric-card storage">
+            <span class="project-metric-icon">▣</span>
+            <div><span>${esc(I18n.t('project.storageUsage') || '占用空间')}</span><strong>${esc(formatProjectBytes(storage.total_bytes))}</strong><small>${esc(I18n.t('project.storageBreakdown') || '镜像、容器可写层和命名卷；不含目录挂载')}</small></div>
+          </article>
+          <article class="project-metric-card cpu">
+            <span class="project-metric-meter" style="--meter-value:${cpuMeter}%"><i></i><b>${esc(formatProjectPercent(cpuPercent))}</b></span>
+            <div><span>${esc(I18n.t('project.cpuUsage') || 'CPU 占用')}</span><strong>${esc(formatProjectPercent(cpuPercent))}</strong><small>${esc((I18n.t('project.runningContainers') || '{count} 个运行中容器').replace('{count}', cpu.running_containers || 0))}</small></div>
+          </article>
+          <article class="project-metric-card memory">
+            <span class="project-metric-meter" style="--meter-value:${memoryMeter}%"><i></i><b>${esc(formatProjectPercent(memoryPercent))}</b></span>
+            <div><span>${esc(I18n.t('project.memoryUsage') || '内存占用')}</span><strong>${esc(formatProjectBytes(memory.usage_bytes))}</strong><small>${esc(memory.limit_bytes ? (I18n.t('project.memoryLimit') || '占容器内存上限的 {percent}').replace('{percent}', formatProjectPercent(memoryPercent)) : (I18n.t('project.memoryLimitUnavailable') || '未设置可用内存上限'))}</small></div>
+          </article>`;
+      }
+
+      if (resourceEl) {
+        resourceEl.classList.remove('loading-inline');
+        resourceEl.innerHTML = `
+          <div class="resource-summary-item"><span>${esc(I18n.t('project.resourceContainers') || '容器')}</span><strong>${containers.length}</strong><small>${containers.map(c => esc(((c.Names || [c.Id])[0] || '').replace(/^\//, ''))).join(', ') || esc(I18n.t('project.notDeployed') || '尚未部署')}</small></div>
+          <div class="resource-summary-item"><span>${esc(I18n.t('project.resourceImages') || '镜像')}</span><strong>${images.length}</strong><small>${images.map(image => esc(image.name || image.id.substring(0, 12))).join(', ') || esc(I18n.t('project.none') || '无')}</small></div>
+          <div class="resource-summary-item"><span>${esc(I18n.t('project.resourceVolumes') || '命名卷')}</span><strong>${volumes.length}</strong><small>${volumes.map(item => esc(item.name)).join(', ') || esc(I18n.t('project.none') || '无')}</small></div>
+          <div class="resource-summary-item"><span>${esc(I18n.t('project.resourceBindMounts') || '目录挂载')}</span><strong>${bindMounts.length}</strong><small>${bindMounts.map(item => esc(item.source)).join(', ') || esc(I18n.t('project.none') || '无')}</small></div>`;
+      }
+    } catch (err) {
+      const message = esc(err.message || I18n.t('project.readTimeout') || '读取超时');
+      if (metricEl) {
+        metricEl.classList.remove('loading-inline');
+        metricEl.innerHTML = `<div class="compact-empty">${esc(I18n.t('project.resourcesUnavailable') || 'Docker 资源暂不可用')}：${message}</div>`;
+      }
+      if (resourceEl) {
+        resourceEl.classList.remove('loading-inline');
+        resourceEl.innerHTML = '';
+      }
+    }
+  },
+
   async saveProject(id) {
     // Collect DOM values synchronously before any await — the modal
     // closes as soon as this handler returns.
@@ -730,4 +810,17 @@ function extractFailedContainerBlocks(logText) {
     blocks.push(logText.slice(start, end).trim());
   }
   return blocks;
+}
+
+function formatProjectBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`;
+  return `${(value / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function formatProjectPercent(value) {
+  const percent = Number(value) || 0;
+  return `${percent.toFixed(percent >= 10 || Number.isInteger(percent) ? 0 : 1)}%`;
 }

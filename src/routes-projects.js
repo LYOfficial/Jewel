@@ -272,10 +272,12 @@ router.post('/:id/deploy', async (req, res) => {
       if (requirePull) {
         // The update action was shown because an upstream commit exists. Do
         // not silently deploy the previous checkout if Git cannot retrieve it.
+        await gitService.prepareManagedEnvFileForPull(project);
         await gitService.pullRepo(project.id, project.git_branch);
       } else {
         // A normal manual deploy remains usable for an existing checkout when
         // the remote is temporarily unavailable.
+        await gitService.prepareManagedEnvFileForPull(project);
         try { await gitService.pullRepo(project.id, project.git_branch); } catch { /* deploy existing checkout */ }
       }
       const output = await dockerService.deployProject(project);
@@ -287,8 +289,9 @@ router.post('/:id/deploy', async (req, res) => {
   });
 });
 
-// Rebuild: stop compose → prune all unused images → check for upstream
-// updates (and pull them if any) → redeploy. Volumes are preserved.
+// Rebuild: stop compose → prune all unused images → discard the cloned
+// checkout and clone the configured branch again → redeploy. Volumes are
+// preserved.
 // The status is flipped to 'rebuilding' synchronously at the very top so
 // the UI sees immediate feedback even if the rebuild takes a long time.
 router.post('/:id/rebuild', async (req, res) => {

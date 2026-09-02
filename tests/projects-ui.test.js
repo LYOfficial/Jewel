@@ -5,6 +5,8 @@ const path = require('path');
 const vm = require('vm');
 
 const projectsSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'projects.js'), 'utf8');
+const projectRoutesSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes-projects.js'), 'utf8');
+const dockerServiceSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'docker-service.js'), 'utf8');
 
 function createProjectsHarness(initialProject, options = {}) {
   let project = { ...initialProject };
@@ -114,6 +116,16 @@ test('project details split the dashboard from deployment configuration', () => 
   assert.match(projectsSource, /projectMetricSummary/);
   assert.match(projectsSource, /loadDashboardResources/);
   assert.match(projectsSource, /operation\.commit_hash/);
+});
+
+test('project updates prepare a Jewel-managed .env file before pulling', () => {
+  assert.match(projectRoutesSource, /prepareManagedEnvFileForPull\(project\)/);
+  assert.match(projectRoutesSource, /await gitService\.pullRepo\(project\.id, project\.git_branch\)/);
+});
+
+test('rebuild replaces the cloned repository before deployment', () => {
+  assert.match(dockerServiceSource, /Step 3\/4 — deleting and recloning repository/);
+  assert.match(dockerServiceSource, /gitService\.cloneRepo\(project\.git_url, project\.id, project\.git_branch, project\.git_token\)/);
 });
 
 test('project action menu always includes check update', async () => {

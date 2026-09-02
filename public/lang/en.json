@@ -89,7 +89,7 @@
   "project.rebuild": "Rebuild",
   "project.rebuilding": "Rebuilding...",
   "project.rebuildSuccess": "Rebuilt successfully",
-  "project.rebuildConfirm": "This will stop the containers, prune all unused images, and redeploy. Mounted volume data will be preserved. Continue?",
+  "project.rebuildConfirm": "This will stop containers, prune unused images, delete and reclone the local repository, then deploy. Docker named volumes and bind mounts outside the project directory are preserved; uncommitted files and bind-mount data inside it are removed. Continue?",
   "project.detail": "Details",
   "project.dashboard": "Dashboard",
   "project.deployment": "Deployment",

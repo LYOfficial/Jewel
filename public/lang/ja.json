@@ -89,7 +89,7 @@
   "project.rebuild": "再構築",
   "project.rebuilding": "再構築中...",
   "project.rebuildSuccess": "再構築に成功しました",
-  "project.rebuildConfirm": "コンテナを停止し、未使用のイメージをクリーンアップして再デプロイします。マウントボリュームのデータは保持されます。続行しますか？",
+  "project.rebuildConfirm": "コンテナを停止し、未使用のイメージをクリーンアップして、ローカルリポジトリを削除・再クローンしてからデプロイします。Docker 名前付きボリュームとプロジェクトディレクトリ外のバインドマウントは保持されますが、ディレクトリ内の未コミットファイルとバインドマウントのデータは削除されます。続行しますか？",
   "project.detail": "詳細",
   "project.dashboard": "ダッシュボード",
   "project.deployment": "デプロイ",

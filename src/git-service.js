@@ -80,6 +80,50 @@ function invalidateGit(projectDir) {
   gitInstances.delete(projectDir);
 }
 
+function renderProjectEnv(envVars) {
+  try {
+    const parsed = JSON.parse(envVars || '{}');
+    return Object.entries(parsed).map(([key, value]) => `${key}=${value}\n`).join('');
+  } catch {
+    return '';
+  }
+}
+
+// Jewel writes the project-level environment variables to <repo>/.env before
+// every Compose deployment. When a repository tracks .env, that managed file
+// would otherwise prevent the next git pull. Only clean the file when its
+// contents exactly match the values saved in Jewel; hand-edited files are
+// deliberately left untouched so Git can report the conflict instead.
+async function prepareManagedEnvFileForPull(project) {
+  const projectDir = path.join(config.dataDir, 'projects', String(project.id));
+  const envPath = path.join(projectDir, '.env');
+  if (!fs.existsSync(envPath)) return false;
+
+  return withGitLock(projectDir, () => withGitGate(async () => {
+    let currentContents;
+    try { currentContents = fs.readFileSync(envPath, 'utf-8'); } catch { return false; }
+    if (currentContents !== renderProjectEnv(project.env_vars)) return false;
+
+    const git = getGit(projectDir);
+    let isTracked = true;
+    try {
+      await git.raw(['ls-files', '--error-unmatch', '--', '.env']);
+    } catch {
+      isTracked = false;
+    }
+
+    if (isTracked) {
+      // This restores both the index and working tree for a tracked .env.
+      await git.raw(['checkout', 'HEAD', '--', '.env']);
+    } else {
+      // An untracked .env with Jewel-managed contents can also block a pull
+      // when the upstream has started tracking the file.
+      fs.rmSync(envPath, { force: true });
+    }
+    return true;
+  }));
+}
+
 async function cloneRepo(gitUrl, projectId, branch = 'main', token = '') {
   const projectDir = path.join(config.dataDir, 'projects', String(projectId));
 
@@ -239,6 +283,7 @@ module.exports = {
   listGitHubRepos,
   listGitLabRepos,
   getRepoCommit,
+  prepareManagedEnvFileForPull,
   fetchRepo,
   getRemoteCommit,
   invalidateGit

@@ -291,7 +291,7 @@ function resetDeployLog(projectId, header) {
   } catch { /* ignore */ }
 }
 
-async function deployProject(project) {
+async function deployProject(project, { appendLog = false } = {}) {
   const projectDir = path.join(
     process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
     'projects',
@@ -299,7 +299,9 @@ async function deployProject(project) {
   );
 
   const startTime = new Date().toISOString();
-  resetDeployLog(project.id, `=== Deploy started at ${startTime} ===\n[project] ${project.name} (id=${project.id})\n[cwd] ${projectDir}\n\n`);
+  const logHeader = `=== Deploy started at ${startTime} ===\n[project] ${project.name} (id=${project.id})\n[cwd] ${projectDir}\n\n`;
+  if (appendLog) appendDeployLog(project.id, `\n${logHeader}`);
+  else resetDeployLog(project.id, logHeader);
 
   const composePath = path.join(projectDir, project.compose_path);
   if (!fs.existsSync(composePath)) {
@@ -460,13 +462,6 @@ async function rebuildProject(project) {
   const startTime = new Date().toISOString();
   resetDeployLog(project.id, `=== Rebuild started at ${startTime} ===\n[project] ${project.name} (id=${project.id})\n[cwd] ${projectDir}\n\n`);
 
-  const composePath = path.join(projectDir, project.compose_path);
-  if (!fs.existsSync(composePath)) {
-    const msg = `docker-compose file not found: ${composePath}`;
-    appendDeployLog(project.id, `[error] ${msg}\n`);
-    throw new Error(msg);
-  }
-
   // 1) Stop — use `compose down` (no -v) so named/bind volumes survive.
   try {
     appendDeployLog(project.id, `[rebuild] Step 1/4 — stopping compose project\n`);
@@ -494,56 +489,31 @@ async function rebuildProject(project) {
   }
 
 
-  let updateResult = 'skipped';
   let localCommit = null;
   let remoteCommit = null;
+  let rebuildLog = '';
   try {
-    appendDeployLog(project.id, `[rebuild] Step 3/4 — checking for upstream updates\n`);
+    appendDeployLog(project.id, `[rebuild] Step 3/4 — deleting and recloning repository\n`);
+    // cloneRepo removes the existing checkout first. Preserve the rebuild
+    // output written so far because that log lives inside the checkout.
+    rebuildLog = readDeployLog(project.id);
+    await gitService.cloneRepo(project.git_url, project.id, project.git_branch, project.git_token);
+    resetDeployLog(project.id, rebuildLog);
     localCommit = await gitService.getRepoCommit(project.id);
-    await gitService.fetchRepo(project.id);
-    remoteCommit = await gitService.getRemoteCommit(project.id, project.git_branch);
-
-    if (!remoteCommit) {
-      appendDeployLog(
-        project.id,
-        `[rebuild] Could not determine remote commit (network or auth issue) — ` +
-        `deploying with local code\n\n`
-      );
-      updateResult = 'checkFailed';
-    } else if (remoteCommit === localCommit) {
-      appendDeployLog(
-        project.id,
-        `[rebuild] Already up to date at ${localCommit || '(unknown)'} — skipping pull\n\n`
-      );
-      updateResult = 'upToDate';
-    } else {
-      appendDeployLog(
-        project.id,
-        `[rebuild] Update found: ${localCommit || '(unknown)'} → ${remoteCommit}; pulling\n`
-      );
-      await gitService.pullRepo(project.id, project.git_branch);
-      const newLocal = await gitService.getRepoCommit(project.id);
-      appendDeployLog(
-        project.id,
-        `[rebuild] Pull complete, now at ${newLocal || '(unknown)'}\n\n`
-      );
-      updateResult = 'updated';
-    }
+    remoteCommit = localCommit;
+    appendDeployLog(project.id, `[rebuild] Repository recloned at ${localCommit || '(unknown)'}\n\n`);
   } catch (err) {
-    // Any error in the update step is non-fatal — log and continue.
-    appendDeployLog(
-      project.id,
-      `[rebuild] Update check failed (continuing with local code): ${err.message}\n\n`
-    );
-    updateResult = 'checkFailed';
+    if (rebuildLog) resetDeployLog(project.id, rebuildLog);
+    appendDeployLog(project.id, `[error] Repository reclone failed: ${err.message}\n`);
+    throw err;
   }
 
 
   appendDeployLog(project.id, `[rebuild] Step 4/4 — deploying\n`);
   try {
-    const stdout = await deployProject(project);
+    const stdout = await deployProject(project, { appendLog: true });
     appendDeployLog(project.id, `\n=== Rebuild succeeded at ${new Date().toISOString()} ===\n`);
-    return { stdout, update: updateResult, localCommit, remoteCommit };
+    return { stdout, update: 'recloned', localCommit, remoteCommit };
   } catch (err) {
     // deployProject already wrote "=== Deploy failed at ... ===" to the log.
     appendDeployLog(project.id, `\n=== Rebuild failed at ${new Date().toISOString()} ===\n`);

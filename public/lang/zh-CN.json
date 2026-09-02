@@ -89,7 +89,7 @@
   "project.rebuild": "重构",
   "project.rebuilding": "重构中...",
   "project.rebuildSuccess": "重构成功",
-  "project.rebuildConfirm": "即将停止容器、清理未使用的镜像、然后重新部署。挂载卷中的数据会保留。是否继续？",
+  "project.rebuildConfirm": "即将停止容器、清理未使用的镜像、删除本地克隆仓库后重新克隆并部署。Docker 命名卷及项目目录外的目录挂载会保留；项目目录中的未提交文件和目录挂载数据会被删除。是否继续？",
   "project.stop": "停止",
   "project.detail": "详情",
   "project.dashboard": "仪表盘",

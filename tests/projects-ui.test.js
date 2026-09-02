@@ -10,6 +10,7 @@ function createProjectsHarness(initialProject, options = {}) {
   let project = { ...initialProject };
   let checkCalls = 0;
   let operationCalls = 0;
+  const deployRequests = [];
   let shownError = null;
   const actionMenus = [];
   const notifications = [];
@@ -24,7 +25,8 @@ function createProjectsHarness(initialProject, options = {}) {
   const sandbox = {
     API: {
       getProjects: async () => [project],
-      deployProject: async () => {
+      deployProject: async (...args) => {
+        deployRequests.push(args);
         if (options.deployError) throw options.deployError;
         return { message: 'Deployed successfully' };
       },
@@ -88,6 +90,7 @@ function createProjectsHarness(initialProject, options = {}) {
     get actionMenuOpen() { return projectActionMenu.open; },
     get checkCalls() { return checkCalls; },
     get operationCalls() { return operationCalls; },
+    get deployRequests() { return deployRequests; },
     get shownError() { return shownError; }
   };
 }
@@ -153,4 +156,7 @@ test('a proxy 504 during project update is reconciled with a successful deploy o
   assert.equal(harness.operationCalls, 1);
   assert.equal(harness.shownError, null);
   assert.ok(harness.notifications.includes('project.updateSuccess'));
+  assert.equal(harness.deployRequests.length, 1);
+  assert.equal(harness.deployRequests[0][0], project.id);
+  assert.equal(harness.deployRequests[0][1].require_pull, true);
 });

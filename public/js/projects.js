@@ -268,7 +268,9 @@ const Projects = {
     Projects.hideRowAction(id, 'update');
     try {
       Notify.info(I18n.t('project.updating') || 'Updating project...');
-      await API.deployProject(id);
+      // An update must never fall back to deploying the old checkout. The
+      // server will fail this operation if it cannot pull the new revision.
+      await API.deployProject(id, { require_pull: true });
       Notify.success(I18n.t('project.updateSuccess') || 'Project updated');
       this.loadList();
     } catch (err) {

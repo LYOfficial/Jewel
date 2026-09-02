@@ -260,6 +260,7 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/deploy', async (req, res) => {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
+  const requirePull = Boolean(req.body && req.body.require_pull);
 
   return runProjectOperation({
     res,
@@ -268,7 +269,15 @@ router.post('/:id/deploy', async (req, res) => {
     activeStatus: 'deploying',
     successStatus: 'running',
     work: async () => {
-      try { await gitService.pullRepo(project.id, project.git_branch); } catch { /* deploy existing checkout */ }
+      if (requirePull) {
+        // The update action was shown because an upstream commit exists. Do
+        // not silently deploy the previous checkout if Git cannot retrieve it.
+        await gitService.pullRepo(project.id, project.git_branch);
+      } else {
+        // A normal manual deploy remains usable for an existing checkout when
+        // the remote is temporarily unavailable.
+        try { await gitService.pullRepo(project.id, project.git_branch); } catch { /* deploy existing checkout */ }
+      }
       const output = await dockerService.deployProject(project);
       await projectUpdateService.updateCommitHash(project.id);
       return { output };

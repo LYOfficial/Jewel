@@ -1541,7 +1541,9 @@ tr:nth-last-child(-n+2) .action-menu-popover { top: auto; bottom: calc(100% + 5p
 .operation-row.running .operation-dot { background: var(--info); }
 .operation-row strong, .operation-row small { display: block; }
 .operation-row strong { font: 11px 'SF Mono', Consolas, monospace; }
-.operation-row small { color: var(--text-muted); margin-top: 1px; }
+.operation-row small { display: flex; gap: 5px 9px; flex-wrap: wrap; color: var(--text-muted); margin-top: 1px; }
+.operation-commit { font-family: 'SF Mono', Consolas, monospace; color: var(--text-secondary); overflow-wrap: anywhere; }
+.operation-commit code { font: inherit; color: inherit; }
 .operation-row time { color: var(--text-muted); font-size: 10px; }
 
 .notification { top: 68px; right: 20px; border-radius: 9px; background: rgba(30,31,35,.96); backdrop-filter: blur(18px); box-shadow: 0 18px 45px rgba(0,0,0,.38); }

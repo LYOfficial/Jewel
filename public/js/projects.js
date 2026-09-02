@@ -579,7 +579,13 @@ const Projects = {
           timeline.innerHTML = operations.length ? operations.map(operation => `
             <div class="operation-row ${operation.status}">
               <span class="operation-dot"></span>
-              <div><strong>${esc(operation.action)}</strong><small>${esc(operation.summary || operation.status)}</small></div>
+              <div>
+                <strong>${esc(operation.action)}</strong>
+                <small>
+                  <span>${esc(operation.summary || operation.status)}</span>
+                  <span class="operation-commit">${esc(I18n.t('project.commit') || 'Commit')}: <code>${esc(operation.commit_hash || '-')}</code></span>
+                </small>
+              </div>
               <time>${esc(operation.finished_at || operation.started_at || '')}</time>
             </div>`).join('') : '<div class="compact-empty">暂无操作记录</div>';
         }

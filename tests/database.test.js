@@ -22,6 +22,16 @@ test('creates operation and backup schema on a fresh data directory', { skip: !h
     assert.equal(taskColumns.has('previous_project_status'), true);
     const planColumns = new Set(db.prepare('PRAGMA table_info(backup_plans)').all().map(row => row.name));
     assert.equal(planColumns.has('retention_count'), true);
+    const operationColumns = new Set(db.prepare('PRAGMA table_info(operation_logs)').all().map(row => row.name));
+    assert.equal(operationColumns.has('commit_hash'), true);
+
+    const project = db.prepare('INSERT INTO projects (name, git_url, commit_hash) VALUES (?, ?, ?)')
+      .run('commit-snapshot', 'https://example.invalid/repo.git', 'initial-commit');
+    const operations = require('../src/operation-service');
+    const operationId = operations.start({ projectId: Number(project.lastInsertRowid), action: 'deploy' });
+    assert.equal(operations.get(operationId).commit_hash, 'initial-commit');
+    operations.setCommitHash(operationId, 'deployed-commit');
+    assert.equal(operations.get(operationId).commit_hash, 'deployed-commit');
   } finally {
     db.close();
     fs.rmSync(dataDir, { recursive: true, force: true });

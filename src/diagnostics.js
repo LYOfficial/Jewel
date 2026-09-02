@@ -40,7 +40,7 @@ function buildDiagnosticReport({ operation, project, deployLog = '', extra = '' 
     `ID: ${(project && project.id) || (operation && operation.project_id) || '-'}`,
     `Git branch: ${(project && project.git_branch) || '-'}`,
     `Compose path: ${(project && project.compose_path) || '-'}`,
-    `Commit: ${(project && project.commit_hash) || '-'}`,
+    `Commit: ${(operation && operation.commit_hash) || (project && project.commit_hash) || '-'}`,
     '',
     '## Failure summary',
     (operation && operation.summary) || 'No summary was recorded.',

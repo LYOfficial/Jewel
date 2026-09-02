@@ -62,6 +62,19 @@ function operationErrorResponse(res, project, operation, err, status = 500) {
   });
 }
 
+async function snapshotOperationCommit(operationId, projectId) {
+  // A deploy can pull a new revision after the operation starts. Read HEAD
+  // when the operation settles so its immutable history entry reflects the
+  // revision actually used; fall back to the project's last known revision.
+  try {
+    const commitHash = await gitService.getRepoCommit(projectId);
+    if (commitHash) return operationService.setCommitHash(operationId, commitHash);
+  } catch { /* use the persisted project value below */ }
+
+  const project = db.prepare('SELECT commit_hash FROM projects WHERE id = ?').get(projectId);
+  return operationService.setCommitHash(operationId, project && project.commit_hash);
+}
+
 async function runProjectOperation({ res, project, action, activeStatus, successStatus, work, summary, response }) {
   const operationId = operationService.start({
     projectId: project.id,
@@ -72,6 +85,7 @@ async function runProjectOperation({ res, project, action, activeStatus, success
     if (activeStatus) db.prepare('UPDATE projects SET status=? WHERE id=?').run(activeStatus, project.id);
     const result = await work();
     if (successStatus) db.prepare('UPDATE projects SET status=? WHERE id=?').run(successStatus, project.id);
+    await snapshotOperationCommit(operationId, project.id);
     const operation = operationService.succeed(operationId, {
       summary: typeof summary === 'function' ? summary(result) : summary,
       detail: result && result.output ? tailLines(result.output, 80) : ''
@@ -80,6 +94,7 @@ async function runProjectOperation({ res, project, action, activeStatus, success
     return res.json({ ...payload, operation_id: operation.id });
   } catch (err) {
     if (activeStatus) db.prepare('UPDATE projects SET status=? WHERE id=?').run('error', project.id);
+    await snapshotOperationCommit(operationId, project.id);
     const operation = operationService.fail(operationId, err, {
       summary: `${action} failed for ${project.name}`,
       detail: tailLines(dockerService.readDeployLog(project.id), 400)
@@ -131,6 +146,7 @@ router.post('/', async (req, res) => {
     await gitService.cloneRepo(git_url, projectId, git_branch || 'main', git_token || '');
     db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('ready', projectId);
     await projectUpdateService.updateCommitHash(projectId);
+    await snapshotOperationCommit(operationId, projectId);
     operationService.succeed(operationId, { summary: `Repository cloned for ${name}` });
   } catch (err) {
     db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('error', projectId);
@@ -186,6 +202,7 @@ router.put('/:id', async (req, res) => {
       await gitService.cloneRepo(git_url, project.id, git_branch || 'main', git_token || '');
       db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('ready', project.id);
       await projectUpdateService.updateCommitHash(project.id);
+      await snapshotOperationCommit(operationId, project.id);
       operationService.succeed(operationId, { summary: `Repository refreshed for ${name}` });
     } catch (err) {
       db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('error', project.id);

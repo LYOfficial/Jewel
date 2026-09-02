@@ -68,6 +68,7 @@ db.exec(`
     status TEXT DEFAULT 'running',
     summary TEXT DEFAULT '',
     detail TEXT DEFAULT '',
+    commit_hash TEXT DEFAULT '',
     metadata TEXT DEFAULT '{}',
     started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     finished_at DATETIME,
@@ -147,6 +148,7 @@ addColumnIfMissing('projects', 'commit_hash', "TEXT DEFAULT ''");
 addColumnIfMissing('projects', 'remote_commit', "TEXT DEFAULT ''");
 addColumnIfMissing('projects', 'update_available', 'INTEGER DEFAULT 0');
 addColumnIfMissing('projects', 'last_update_check', 'TEXT DEFAULT NULL');
+addColumnIfMissing('operation_logs', 'commit_hash', "TEXT DEFAULT ''");
 addColumnIfMissing('backup_tasks', 'operation_id', 'INTEGER DEFAULT NULL');
 addColumnIfMissing('backup_tasks', 'paused_container_ids', "TEXT DEFAULT '[]'");
 addColumnIfMissing('backup_tasks', 'previous_project_status', "TEXT DEFAULT ''");

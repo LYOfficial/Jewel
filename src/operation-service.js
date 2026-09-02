@@ -1,12 +1,31 @@
 const db = require('./database');
 const { redactSecrets, buildDiagnosticReport } = require('./diagnostics');
 
-function start({ projectId = null, resourceType = 'project', resourceId = '', action, metadata = {} }) {
+function projectCommitHash(projectId) {
+  if (!projectId) return '';
+  const project = db.prepare('SELECT commit_hash FROM projects WHERE id = ?').get(projectId);
+  return String((project && project.commit_hash) || '').trim();
+}
+
+function start({ projectId = null, resourceType = 'project', resourceId = '', action, commitHash, metadata = {} }) {
+  // Persist a snapshot instead of relying on projects.commit_hash at render
+  // time: a later deploy may move the project to a different revision.
+  const resolvedCommitHash = commitHash === undefined
+    ? projectCommitHash(projectId)
+    : String(commitHash || '').trim();
   const result = db.prepare(`
-    INSERT INTO operation_logs (project_id, resource_type, resource_id, action, status, metadata)
-    VALUES (?, ?, ?, ?, 'running', ?)
-  `).run(projectId, resourceType, String(resourceId || ''), action, JSON.stringify(metadata || {}));
+    INSERT INTO operation_logs (project_id, resource_type, resource_id, action, status, commit_hash, metadata)
+    VALUES (?, ?, ?, ?, 'running', ?, ?)
+  `).run(projectId, resourceType, String(resourceId || ''), action, resolvedCommitHash, JSON.stringify(metadata || {}));
   return Number(result.lastInsertRowid);
+}
+
+function setCommitHash(id, commitHash) {
+  const normalized = String(commitHash || '').trim();
+  if (normalized) {
+    db.prepare('UPDATE operation_logs SET commit_hash=? WHERE id=?').run(normalized, id);
+  }
+  return get(id);
 }
 
 function succeed(id, { summary = 'Operation completed', detail = '', metadata } = {}) {
@@ -55,4 +74,4 @@ function report(operation, project, deployLog = '', extra = '') {
   return buildDiagnosticReport({ operation, project, deployLog, extra });
 }
 
-module.exports = { start, succeed, fail, get, listForProject, latestFailure, report };
+module.exports = { start, setCommitHash, succeed, fail, get, listForProject, latestFailure, report };

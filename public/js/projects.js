@@ -3,7 +3,8 @@ const Projects = {
     container.innerHTML = `
       <div class="page-shell">
         <section class="section-card">
-          <div class="section-card-toolbar">
+          <div class="section-card-header">
+            <div><h3 data-i18n="project.list">项目列表</h3><p data-i18n="project.listHint">选择项目查看部署配置、日志和运行资源。</p></div>
             <button class="btn btn-primary" id="addProjectBtn" data-i18n="project.add">添加项目</button>
           </div>
           <div id="projectsList" class="table-container"></div>

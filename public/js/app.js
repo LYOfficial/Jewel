@@ -342,18 +342,12 @@ const App = {
   },
 
   async pollUpdate() {
-    try {
-      const info = await API.checkUpdate();
-      const banner = document.getElementById('updateBanner');
-      if (info.available) {
-        banner.classList.add('show');
-      } else {
-        banner.classList.remove('show');
-      }
-    } catch { /* ignore */ }
-    setInterval(async () => {
+    const refresh = async () => {
       try {
-        const info = await API.checkUpdate();
+        // A browser refresh should always initiate a fresh GitHub check. This
+        // is deliberately invoked after navigation and never awaited by init,
+        // so the UI remains responsive while the network request runs.
+        const info = await API.forceCheckUpdate();
         const banner = document.getElementById('updateBanner');
         if (info.available) {
           banner.classList.add('show');
@@ -361,7 +355,10 @@ const App = {
           banner.classList.remove('show');
         }
       } catch { /* ignore */ }
-    }, 5 * 60 * 1000);
+    };
+
+    await refresh();
+    setInterval(refresh, 5 * 60 * 1000);
   }
 };
 

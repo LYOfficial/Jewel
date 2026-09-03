@@ -5,7 +5,8 @@ const Containers = {
     container.innerHTML = `
       <div class="page-shell">
         <section class="section-card">
-          <div class="section-card-toolbar">
+          <div class="section-card-header">
+            <div><h3 data-i18n="container.list">容器列表</h3><p data-i18n="container.listHint">状态会自动刷新；更多操作收纳在每一行的操作菜单中。</p></div>
             <button class="btn" id="refreshContainers" data-i18n="common.refresh">刷新</button>
           </div>
           <div id="containersList" class="table-container"></div>

@@ -6,7 +6,8 @@ const Images = {
     container.innerHTML = `
       <div class="page-shell">
         <section class="section-card">
-          <div class="section-card-toolbar">
+          <div class="section-card-header">
+            <div><h3 data-i18n="images.list">镜像列表</h3><p id="imagesSummary"></p></div>
             <details class="action-menu page-action-menu">
               <summary>操作 <span>⌄</span></summary>
               <div class="action-menu-popover">
@@ -15,9 +16,6 @@ const Images = {
                 <button class="action-menu-item danger" id="pruneImagesBtn" data-i18n="images.pruneAll">一键删除未使用</button>
               </div>
             </details>
-          </div>
-          <div class="section-card-header">
-            <p id="imagesSummary"></p>
           </div>
           <div id="imagesList" class="table-container"></div>
         </section>

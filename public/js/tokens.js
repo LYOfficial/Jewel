@@ -3,7 +3,8 @@ const Tokens = {
     container.innerHTML = `
       <div class="page-shell">
         <section class="section-card">
-          <div class="section-card-toolbar">
+          <div class="section-card-header">
+            <div><h3 data-i18n="tokens.list">Git 令牌列表</h3><p data-i18n="tokens.listHint">令牌内容会安全保存，列表中不会显示密钥本身。</p></div>
             <button class="btn btn-primary" id="addTokenBtn" data-i18n="tokens.add">添加令牌</button>
           </div>
           <div id="tokensList" class="table-container"></div>

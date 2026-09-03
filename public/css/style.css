@@ -1677,14 +1677,15 @@ html[data-theme="light"] .nav-item.active .nav-icon img { opacity: 1; filter: in
 
 .main-content { background: transparent; }
 .topbar {
-  height: 64px;
-  flex-basis: 64px;
+  height: 76px;
+  flex-basis: 76px;
   padding: 0 32px;
   background: var(--topbar-surface);
   border-bottom-color: var(--line);
   box-shadow: 0 1px 0 rgba(255,255,255,.025);
 }
-.topbar-context { display: flex; align-items: center; min-width: 0; }
+.topbar-context { display: grid; gap: 2px; min-width: 0; }
+.topbar-kicker { color: var(--text-muted); font: 600 9px/1.2 'SF Mono', Consolas, monospace; letter-spacing: 1.35px; }
 .topbar-title { font-size: 28px; font-weight: 720; letter-spacing: -.7px; color: var(--text-primary); }
 .topbar-actions { gap: 9px; }
 .topbar-actions select {
@@ -1821,8 +1822,8 @@ html[data-theme="light"] .login-title, html[data-theme="light"] .login-subtitle 
 html[data-theme="light"] .login-right { background: var(--surface-raised); }
 
 @media (max-width: 768px) {
-  .topbar { height: 58px; flex-basis: 58px; padding: 0 14px; }
-  .topbar-kicker, #langSelect { display: none; }
+  .topbar { height: 70px; flex-basis: 70px; padding: 0 14px; }
+  #langSelect { display: none; }
   .content-area { padding: 22px 14px 42px; }
   .theme-toggle { width: 32px; height: 32px; }
   .user-menu-btn { padding-right: 4px; }

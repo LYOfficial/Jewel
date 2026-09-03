@@ -120,7 +120,9 @@ const Settings = {
     });
 
     this.loadSystemInfo();
-    this.checkUpdate();
+    // Entering Settings should show a newly checked version, just like a
+    // full page refresh. The server deduplicates it with App.pollUpdate().
+    this.checkUpdate(true);
   },
 
   updateTimezonePreview(tz) {

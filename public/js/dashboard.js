@@ -3,6 +3,15 @@ const Dashboard = {
 
   async render(container) {
     container.innerHTML = `
+      <div class="page-shell dashboard-page">
+      <div class="page-heading">
+        <div>
+          <div class="page-eyebrow">SYSTEM OVERVIEW</div>
+          <h2 data-i18n="nav.dashboard">仪表盘</h2>
+          <p data-i18n="dashboard.workspaceHint">一眼查看主机资源、网络流量和最近的部署项目。</p>
+        </div>
+        <div class="dashboard-live-status"><span></span><span data-i18n="dashboard.live">实时监控</span></div>
+      </div>
       <!-- System Info Bar -->
       <div class="card" id="sysInfoCard">
         <div class="card-header">
@@ -59,6 +68,7 @@ const Dashboard = {
           <div id="notebookContent" class="notebook-content"></div>
         </div>
       </div>
+      </div>
     `;
     I18n.apply();
 
@@ -93,14 +103,14 @@ const Dashboard = {
       `;
 
       // Rings
-      this.drawRing('cpuRing', m.cpuPercent, '#ffffff');
+      this.drawRing('cpuRing', m.cpuPercent, this.themeColor('--ring-accent'));
       document.getElementById('cpuValue').textContent = m.cpuPercent + '%';
 
-      this.drawRing('memRing', m.memPercent, '#ffffff');
+      this.drawRing('memRing', m.memPercent, this.themeColor('--ring-accent'));
       document.getElementById('memValue').textContent = formatBytes(m.memUsed) + ' / ' + formatBytes(m.memTotal);
 
       const diskPct = m.diskInfo?.percent || 0;
-      this.drawRing('diskRing', diskPct, '#ffffff');
+      this.drawRing('diskRing', diskPct, this.themeColor('--ring-accent'));
       document.getElementById('diskValue').textContent = formatBytes(m.diskInfo?.used || 0) + ' / ' + formatBytes(m.diskInfo?.total || 0);
 
       // Network
@@ -135,7 +145,7 @@ const Dashboard = {
     // Background ring
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.strokeStyle = '#2a2a2a';
+    ctx.strokeStyle = this.themeColor('--ring-track');
     ctx.lineWidth = lw;
     ctx.stroke();
 
@@ -146,6 +156,10 @@ const Dashboard = {
     ctx.lineWidth = lw;
     ctx.lineCap = 'round';
     ctx.stroke();
+  },
+
+  themeColor(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#3b82f6';
   },
 
   // ===== Projects =====

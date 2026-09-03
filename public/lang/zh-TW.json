@@ -357,5 +357,17 @@
   "backup.phaseFailed": "失敗",
   "backup.phaseInterrupted": "因重新啟動而中斷",
   "backup.providerLocal": "本機 / NAS",
-  "backup.providerBaidu": "百度網盤"
+  "backup.providerBaidu": "百度網盤",
+  "theme.light": "切換至日間模式",
+  "theme.dark": "切換至夜間模式",
+  "dashboard.workspaceHint": "一眼查看主機資源、網路流量與最近的部署專案。",
+  "dashboard.live": "即時監控",
+  "project.workspaceHint": "集中管理程式碼倉庫、部署狀態與執行資源。",
+  "project.listHint": "選擇專案即可查看部署設定、日誌與執行資源。",
+  "container.workspaceHint": "查看所有 Docker 容器的狀態、連接埠與執行操作。",
+  "container.listHint": "狀態會自動重新整理；更多操作收納在每列的操作選單中。",
+  "tokens.workspaceHint": "集中保存用於複製與更新倉庫的存取憑據。",
+  "tokens.listHint": "令牌內容會安全保存，清單中不會顯示密鑰本身。",
+  "images.workspaceHint": "檢查映像使用量、建置快取與容器引用情況。",
+  "settings.workspaceHint": "管理本地化、執行環境、帳戶與 Jewel 系統更新。"
 }

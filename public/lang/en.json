@@ -441,5 +441,17 @@
   "backup.phaseFailed": "Failed",
   "backup.phaseInterrupted": "Interrupted by restart",
   "backup.providerLocal": "Local / NAS",
-  "backup.providerBaidu": "Baidu Netdisk"
+  "backup.providerBaidu": "Baidu Netdisk",
+  "theme.light": "Switch to light mode",
+  "theme.dark": "Switch to dark mode",
+  "dashboard.workspaceHint": "See host resources, network traffic, and recent deployments at a glance.",
+  "dashboard.live": "Live monitoring",
+  "project.workspaceHint": "Manage source repositories, deployment status, and runtime resources in one place.",
+  "project.listHint": "Select a project to view its deployment configuration, logs, and runtime resources.",
+  "container.workspaceHint": "Inspect every Docker container's status, ports, and runtime actions.",
+  "container.listHint": "Status refreshes automatically; more actions are available from each row's menu.",
+  "tokens.workspaceHint": "Store the credentials used to clone and update repositories.",
+  "tokens.listHint": "Token values are stored securely and are never displayed in the list.",
+  "images.workspaceHint": "Review image storage, build cache, and container references.",
+  "settings.workspaceHint": "Manage localization, runtime preferences, your account, and Jewel updates."
 }

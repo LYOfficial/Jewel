@@ -1,11 +1,24 @@
 const Tokens = {
   async render(container) {
     container.innerHTML = `
-      <div class="card-header" style="margin-bottom:16px">
-        <div class="card-title" data-i18n="tokens.list">Git 令牌列表</div>
-        <button class="btn btn-primary btn-sm" id="addTokenBtn" data-i18n="tokens.add">添加令牌</button>
+      <div class="page-shell">
+        <div class="page-heading">
+          <div>
+            <div class="page-eyebrow">CREDENTIALS</div>
+            <h2 data-i18n="nav.tokens">Git 令牌</h2>
+            <p data-i18n="tokens.workspaceHint">集中保存用于克隆与更新仓库的访问凭据。</p>
+          </div>
+          <div class="page-heading-actions">
+            <button class="btn btn-primary" id="addTokenBtn" data-i18n="tokens.add">添加令牌</button>
+          </div>
+        </div>
+        <section class="section-card">
+          <div class="section-card-header">
+            <div><h3 data-i18n="tokens.list">Git 令牌列表</h3><p data-i18n="tokens.listHint">令牌内容会安全保存，列表中不会显示密钥本身。</p></div>
+          </div>
+          <div id="tokensList" class="table-container"></div>
+        </section>
       </div>
-      <div id="tokensList" class="table-container"></div>
     `;
     I18n.apply();
     document.getElementById('addTokenBtn').addEventListener('click', () => this.showAddForm());

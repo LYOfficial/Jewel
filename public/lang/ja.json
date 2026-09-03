@@ -357,5 +357,17 @@
   "backup.phaseFailed": "失敗",
   "backup.phaseInterrupted": "再起動により中断",
   "backup.providerLocal": "ローカル / NAS",
-  "backup.providerBaidu": "Baidu Netdisk"
+  "backup.providerBaidu": "Baidu Netdisk",
+  "theme.light": "ライトモードに切り替え",
+  "theme.dark": "ダークモードに切り替え",
+  "dashboard.workspaceHint": "ホストリソース、ネットワークトラフィック、最近のデプロイをひと目で確認できます。",
+  "dashboard.live": "リアルタイム監視",
+  "project.workspaceHint": "ソースリポジトリ、デプロイ状態、実行中のリソースを一元管理します。",
+  "project.listHint": "プロジェクトを選択すると、デプロイ設定、ログ、実行中のリソースを確認できます。",
+  "container.workspaceHint": "すべての Docker コンテナの状態、ポート、実行操作を確認します。",
+  "container.listHint": "状態は自動更新されます。各行のメニューからさらに操作できます。",
+  "tokens.workspaceHint": "リポジトリのクローンと更新に使う認証情報をまとめて保存します。",
+  "tokens.listHint": "トークン値は安全に保存され、一覧には表示されません。",
+  "images.workspaceHint": "イメージ使用量、ビルドキャッシュ、コンテナからの参照を確認します。",
+  "settings.workspaceHint": "ローカライズ、実行環境、アカウント、Jewel 更新を管理します。"
 }

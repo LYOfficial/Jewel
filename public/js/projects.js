@@ -1,11 +1,24 @@
 const Projects = {
   async render(container) {
     container.innerHTML = `
-      <div class="card-header" style="margin-bottom:16px">
-        <div class="card-title" data-i18n="project.list">项目列表</div>
-        <button class="btn btn-primary btn-sm" id="addProjectBtn" data-i18n="project.add">添加项目</button>
+      <div class="page-shell">
+        <div class="page-heading">
+          <div>
+            <div class="page-eyebrow">DEPLOYMENT WORKSPACE</div>
+            <h2 data-i18n="nav.projects">项目</h2>
+            <p data-i18n="project.workspaceHint">集中管理代码仓库、部署状态与运行资源。</p>
+          </div>
+          <div class="page-heading-actions">
+            <button class="btn btn-primary" id="addProjectBtn" data-i18n="project.add">添加项目</button>
+          </div>
+        </div>
+        <section class="section-card">
+          <div class="section-card-header">
+            <div><h3 data-i18n="project.list">项目列表</h3><p data-i18n="project.listHint">选择项目查看部署配置、日志和运行资源。</p></div>
+          </div>
+          <div id="projectsList" class="table-container"></div>
+        </section>
       </div>
-      <div id="projectsList" class="table-container"></div>
     `;
     I18n.apply();
     document.getElementById('addProjectBtn').addEventListener('click', () => this.showAddForm());

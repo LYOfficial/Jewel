@@ -4,11 +4,14 @@ const Images = {
 
   async render(container) {
     container.innerHTML = `
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title" data-i18n="images.list">镜像列表</div>
-          <div class="topbar-actions">
-            <span id="imagesSummary" style="color:var(--text-muted);font-size:12px"></span>
+      <div class="page-shell">
+        <div class="page-heading">
+          <div>
+            <div class="page-eyebrow">IMAGE LIBRARY</div>
+            <h2 data-i18n="nav.images">镜像</h2>
+            <p data-i18n="images.workspaceHint">检查镜像占用、构建缓存和容器引用情况。</p>
+          </div>
+          <div class="page-heading-actions">
             <details class="action-menu page-action-menu">
               <summary>操作 <span>⌄</span></summary>
               <div class="action-menu-popover">
@@ -19,7 +22,12 @@ const Images = {
             </details>
           </div>
         </div>
-        <div id="imagesList" class="table-container"></div>
+        <section class="section-card">
+          <div class="section-card-header">
+            <div><h3 data-i18n="images.list">镜像列表</h3><p id="imagesSummary"></p></div>
+          </div>
+          <div id="imagesList" class="table-container"></div>
+        </section>
       </div>
     `;
     I18n.apply();

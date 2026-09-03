@@ -34,6 +34,7 @@ const App = {
     try {
       const me = await API.getMe();
       document.getElementById('currentUser').textContent = me.username;
+      this.updateUserAvatar(me.username);
     } catch {
       API.clearToken();
       window.location.href = '/login.html';
@@ -41,6 +42,7 @@ const App = {
     }
 
     await I18n.init();
+    this.applyTheme(localStorage.getItem('jewel-theme') || 'dark');
     const savedLang = localStorage.getItem('jewel-lang');
     if (savedLang) {
       document.querySelectorAll('#langSelect').forEach(s => s.value = savedLang);
@@ -83,8 +85,14 @@ const App = {
     document.querySelectorAll('#langSelect').forEach(sel => {
       sel.addEventListener('change', async (e) => {
         await I18n.setLang(e.target.value);
+        this.updateThemeToggle();
         this.navigate(this.currentPage, { silent: true });
       });
+    });
+
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      const current = document.documentElement.dataset.theme || 'dark';
+      this.applyTheme(current === 'dark' ? 'light' : 'dark');
     });
 
     document.getElementById('userMenuBtn').addEventListener('click', (e) => {
@@ -174,6 +182,31 @@ const App = {
         // Unknown page — fall back to dashboard
         Dashboard.render(container);
     }
+  },
+
+  applyTheme(theme) {
+    const nextTheme = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = nextTheme;
+    localStorage.setItem('jewel-theme', nextTheme);
+    this.updateThemeToggle();
+  },
+
+  updateThemeToggle() {
+    const toggle = document.getElementById('themeToggle');
+    if (!toggle) return;
+    const isLight = document.documentElement.dataset.theme === 'light';
+    const label = isLight
+      ? (I18n.t('theme.dark') || '切换到夜间模式')
+      : (I18n.t('theme.light') || '切换到日间模式');
+    toggle.title = label;
+    toggle.setAttribute('aria-label', label);
+    const icon = toggle.querySelector('.theme-toggle-icon');
+    if (icon) icon.textContent = isLight ? '☼' : '☾';
+  },
+
+  updateUserAvatar(username) {
+    const avatar = document.getElementById('userAvatar');
+    if (avatar) avatar.textContent = String(username || 'A').trim().charAt(0).toUpperCase() || 'A';
   },
 
   actionMenu(items, label = '操作') {
@@ -298,6 +331,7 @@ const App = {
             const res = await API.changeUsername(newName);
             API.setToken(res.token);
             document.getElementById('currentUser').textContent = newName;
+            this.updateUserAvatar(newName);
             Notify.success(I18n.t('common.saved') || 'Saved');
           } catch (err) { Notify.error(err.message); }
         }

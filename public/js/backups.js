@@ -13,13 +13,10 @@ const Backups = {
   async render(container) {
     container.innerHTML = `
       <div class="page-shell">
-        <div class="page-heading">
-          <div>
-            <div class="page-eyebrow">DATA PROTECTION</div>
-            <h2>${this.t('title', '备份中心')}</h2>
-            <p>${this.t('subtitle', '将项目挂载卷打包到 Cloudflare R2、OneDrive、百度网盘、AnyShare 或本地目录。')}</p>
-          </div>
-          <div class="page-heading-actions">
+        <div id="backupOverview" class="stats-grid"></div>
+        <section class="section-card">
+          <div class="section-card-header">
+            <div><h3>${this.t('plans', '备份计划')}</h3><p>${this.t('plansDescription', '手动执行，或按小时周期自动执行。')}</p></div>
             <details class="action-menu page-action-menu">
               <summary>${this.t('new', '新建')} <span>⌄</span></summary>
               <div class="action-menu-popover">
@@ -27,12 +24,6 @@ const Backups = {
                 <button class="action-menu-item" id="addBackupProvider"><span class="action-menu-icon">◇</span>${this.t('provider', '存储目标')}</button>
               </div>
             </details>
-          </div>
-        </div>
-        <div id="backupOverview" class="stats-grid"></div>
-        <section class="section-card">
-          <div class="section-card-header">
-            <div><h3>${this.t('plans', '备份计划')}</h3><p>${this.t('plansDescription', '手动执行，或按小时周期自动执行。')}</p></div>
           </div>
           <div id="backupPlans" class="table-container"></div>
         </section>

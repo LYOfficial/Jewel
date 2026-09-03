@@ -4,23 +4,13 @@ const Containers = {
   async render(container) {
     container.innerHTML = `
       <div class="page-shell">
-        <div class="page-heading">
-          <div>
-            <div class="page-eyebrow">RUNTIME</div>
-            <h2 data-i18n="nav.containers">容器</h2>
-            <p data-i18n="container.workspaceHint">查看所有 Docker 容器的状态、端口和运行操作。</p>
-          </div>
-          <div class="page-heading-actions">
-            <button class="btn" id="refreshContainers" data-i18n="common.refresh">刷新</button>
-          </div>
-        </div>
         <section class="section-card">
-          <div class="section-card-header">
-            <div><h3 data-i18n="container.list">容器列表</h3><p data-i18n="container.listHint">状态会自动刷新；更多操作收纳在每一行的操作菜单中。</p></div>
+          <div class="section-card-toolbar">
+            <button class="btn" id="refreshContainers" data-i18n="common.refresh">刷新</button>
           </div>
           <div id="containersList" class="table-container"></div>
         </section>
-        </div>
+      </div>
     `;
     I18n.apply();
 

@@ -5,13 +5,8 @@ const Images = {
   async render(container) {
     container.innerHTML = `
       <div class="page-shell">
-        <div class="page-heading">
-          <div>
-            <div class="page-eyebrow">IMAGE LIBRARY</div>
-            <h2 data-i18n="nav.images">镜像</h2>
-            <p data-i18n="images.workspaceHint">检查镜像占用、构建缓存和容器引用情况。</p>
-          </div>
-          <div class="page-heading-actions">
+        <section class="section-card">
+          <div class="section-card-toolbar">
             <details class="action-menu page-action-menu">
               <summary>操作 <span>⌄</span></summary>
               <div class="action-menu-popover">
@@ -21,10 +16,8 @@ const Images = {
               </div>
             </details>
           </div>
-        </div>
-        <section class="section-card">
           <div class="section-card-header">
-            <div><h3 data-i18n="images.list">镜像列表</h3><p id="imagesSummary"></p></div>
+            <p id="imagesSummary"></p>
           </div>
           <div id="imagesList" class="table-container"></div>
         </section>

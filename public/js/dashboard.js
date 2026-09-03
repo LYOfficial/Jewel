@@ -4,18 +4,11 @@ const Dashboard = {
   async render(container) {
     container.innerHTML = `
       <div class="page-shell dashboard-page">
-      <div class="page-heading">
-        <div>
-          <div class="page-eyebrow">SYSTEM OVERVIEW</div>
-          <h2 data-i18n="nav.dashboard">仪表盘</h2>
-          <p data-i18n="dashboard.workspaceHint">一眼查看主机资源、网络流量和最近的部署项目。</p>
-        </div>
-        <div class="dashboard-live-status"><span></span><span data-i18n="dashboard.live">实时监控</span></div>
-      </div>
       <!-- System Info Bar -->
       <div class="card" id="sysInfoCard">
         <div class="card-header">
           <div class="card-title" data-i18n="dashboard.systemInfo">系统信息</div>
+          <div class="dashboard-live-status"><span></span><span data-i18n="dashboard.live">实时监控</span></div>
         </div>
         <div id="sysInfoContent" class="sys-info-bar"><span class="spinner"></span></div>
       </div>

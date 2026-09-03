@@ -38,13 +38,6 @@ const Settings = {
 
     container.innerHTML = `
       <div class="page-shell settings-page">
-        <div class="page-heading">
-          <div>
-            <div class="page-eyebrow">PREFERENCES</div>
-            <h2 data-i18n="nav.settings">设置</h2>
-            <p data-i18n="settings.workspaceHint">管理本地化、运行环境、账户与 Jewel 系统更新。</p>
-          </div>
-        </div>
         <div class="settings-grid">
       <div class="card">
         <div class="card-header">

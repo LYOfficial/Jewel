@@ -25,11 +25,16 @@ router.get('/', async (req, res) => {
       const id = img.Id;
       const containers = usage[id] || [];
       const childCount = buildCache[id] || 0;
+      const hasTag = (img.RepoTags || []).some(tag => tag && tag !== '<none>:<none>');
       const shortId = id ? id.replace(/^sha256:/, '').substring(0, 12) : '';
       return {
         ...img,
         shortId,
         in_use: containers.length > 0,
+        // Docker denotes an image with no remaining repository tag as
+        // `<none>:<none>`.  These are real but normally disposable old
+        // builds; they should not look like blank or missing table rows.
+        is_dangling: !hasTag,
         is_build_cache: childCount > 0,
         child_count: childCount,
         containers
@@ -43,33 +48,40 @@ router.get('/', async (req, res) => {
 
     const totalSize = decorated.reduce((s, i) => s + (i.Size || 0), 0);
     const inUseSize = decorated.filter(i => i.in_use).reduce((s, i) => s + (i.Size || 0), 0);
-    const buildCacheCount = decorated.filter(i => !i.in_use && i.is_build_cache).length;
-    const buildCacheSize = decorated.filter(i => !i.in_use && i.is_build_cache).reduce((s, i) => s + (i.Size || 0), 0);
+    const unusedImages = decorated.filter(i => !i.in_use);
+    const buildCacheImages = unusedImages.filter(i => i.is_build_cache);
+    // Keep the categories mutually exclusive in the summary: an untagged
+    // parent image belongs to build cache rather than being counted twice.
+    const danglingImages = unusedImages.filter(i => i.is_dangling && !i.is_build_cache);
+    const standaloneUnusedImages = unusedImages.filter(i => !i.is_build_cache && !i.is_dangling);
+    const buildCacheCount = buildCacheImages.length;
+    const buildCacheSize = buildCacheImages.reduce((s, i) => s + (i.Size || 0), 0);
 
-    // Hide pure build-cache intermediates from the default list. These are
-    // untagged parents of other images — they cannot be deleted one-by-one
-    // (Docker returns 409 "dependent child images"), they're never useful to
-    // the user as standalone entries, and they accumulate quickly during
-    // iterative `docker build` cycles. The user only needs to see them in
-    // the totals and clean them via "Prune Unused" → builder prune.
+    // Hide internal build artifacts from the default list. This covers both
+    // build-cache parents and dangling (`<none>`) images left after a build
+    // or retag. They remain available through `show_all` for diagnosis, but
+    // the normal list stays focused on named images the user can recognize.
     //
     // Query opt-out: `?all=true` returns the unfiltered list so /history,
     // /:id and the detail modal keep working for these images.
     const showAll = req.query.show_all === 'true';
     const visibleImages = showAll
       ? decorated
-      : decorated.filter(img => img.in_use || !img.is_build_cache);
+      : decorated.filter(img => img.in_use || (!img.is_build_cache && !img.is_dangling));
 
     res.json({
       images: visibleImages,
       totals: {
         count: decorated.length,
         inUseCount: decorated.filter(i => i.in_use).length,
-        unusedCount: decorated.filter(i => !i.in_use).length,
+        unusedCount: unusedImages.length,
+        standaloneUnusedCount: standaloneUnusedImages.length,
+        danglingCount: danglingImages.length,
         buildCacheCount,
         buildCacheSize,
         visibleCount: visibleImages.length,
         hiddenCount: decorated.length - visibleImages.length,
+        hiddenDanglingCount: danglingImages.length,
         totalSize,
         inUseSize,
         unusedSize: totalSize - inUseSize

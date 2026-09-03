@@ -14,6 +14,7 @@ COPY . .
 # Inject current git commit SHA at build time
 ARG JEWEL_COMMIT=unknown
 ENV JEWEL_COMMIT=${JEWEL_COMMIT}
+LABEL io.jewel.managed=true
 
 RUN mkdir -p /data/projects
 

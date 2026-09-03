@@ -31,7 +31,7 @@ const Images = {
     this.refreshTimer = setInterval(() => this.loadList(), 30000);
   },
 
-  // `showAll` flips between the default (hide build cache) and the full
+  // `showAll` flips between the default (hide internal build artifacts) and the full
   // (show everything) listings. State is held in memory only — we don't
   // persist it across page reloads because the next list refresh would
   // re-evaluate it anyway.
@@ -62,7 +62,7 @@ const Images = {
     const totals = this.data.totals || { count: 0, inUseCount: 0, unusedCount: 0, buildCacheCount: 0, totalSize: 0, unusedSize: 0 };
 
     // Toggle the "Show hidden" button. We show it whenever there are
-    // hidden build-cache intermediates AND we're currently in the
+    // hidden build artifacts AND we're currently in the
     // default (filtered) view. When the user has clicked the button
     // and we're showing everything, the button label flips to
     // "Hide build cache" so the action is reversible.
@@ -71,7 +71,7 @@ const Images = {
       const hiddenCount = totals.hiddenCount || 0;
       if (this.showAll) {
         toggleBtn.style.display = '';
-        toggleBtn.textContent = I18n.t('images.hideHidden') || '隐藏构建缓存';
+        toggleBtn.textContent = I18n.t('images.hideHidden') || '隐藏内部镜像';
         toggleBtn.setAttribute('data-i18n', 'images.hideHidden');
       } else if (hiddenCount > 0) {
         toggleBtn.style.display = '';
@@ -85,15 +85,18 @@ const Images = {
 
     if (summary) {
       const buildCacheCount = totals.buildCacheCount || 0;
+      const danglingCount = totals.danglingCount || 0;
       const hiddenCount = totals.hiddenCount || 0;
-      const unusedOnly = Math.max(0, (totals.unusedCount || 0) - buildCacheCount);
+      const unusedOnly = typeof totals.standaloneUnusedCount === 'number'
+        ? totals.standaloneUnusedCount
+        : Math.max(0, (totals.unusedCount || 0) - buildCacheCount - danglingCount);
       // Show the hidden-count hint only when we actually hid something.
       // When the user opens "show all" via the toggle below, the count is 0
       // and we drop the parenthetical so the summary stays clean.
       const hiddenHint = hiddenCount > 0
         ? (I18n.t('images.hiddenHint')
             ? I18n.t('images.hiddenHint').replace('{n}', hiddenCount)
-            : `（已隐藏 ${hiddenCount} 个构建缓存中间层）`)
+            : `（已隐藏 ${hiddenCount} 个内部构建镜像）`)
         : '';
       summary.textContent = (I18n.t('images.summary')
         ? I18n.t('images.summary')
@@ -101,20 +104,21 @@ const Images = {
             .replace('{inUse}', totals.inUseCount)
             .replace('{unused}', unusedOnly)
             .replace('{buildCache}', buildCacheCount)
+            .replace('{dangling}', danglingCount)
             .replace('{unusedSize}', formatBytes(totals.unusedSize || 0))
-        : `共 ${totals.count} 个，${totals.inUseCount} 个使用中，${buildCacheCount} 个构建缓存，${unusedOnly} 个未使用（${formatBytes(totals.unusedSize || 0)}）`)
+        : `共 ${totals.count} 个，${totals.inUseCount} 个使用中，${buildCacheCount} 个构建缓存，${danglingCount} 个无标签遗留镜像，${unusedOnly} 个其他未使用（${formatBytes(totals.unusedSize || 0)}）`)
         + (hiddenHint ? ' ' + hiddenHint : '');
     }
 
     if (!this.data.images || this.data.images.length === 0) {
       // Distinguish two empty states:
       //   - truly no images on this host (decorated.length === 0)
-      //   - everything was hidden because it's build-cache intermediates
-      //     (decorated.length > 0 but all of them are build cache)
+      //   - everything was hidden because it is an internal build artifact
+      //     (decorated.length > 0 but no named images are visible)
       const totals = this.data.totals || {};
       const hasHidden = (totals.hiddenCount || 0) > 0;
       const emptyMsg = hasHidden
-        ? (I18n.t('images.allHidden') || '所有镜像都是构建缓存中间层，已隐藏。请点击「一键清理未使用」清理。')
+        ? (I18n.t('images.allHidden') || '所有镜像均为内部构建镜像，已隐藏。请点击「一键清理未使用」释放空间。')
         : null;
       el.innerHTML = `<div class="empty-state">
         <div class="empty-icon"><img src="/img/icons/images.svg" alt="" style="width:48px;height:48px;opacity:0.3;filter:invert(1)"></div>
@@ -140,7 +144,9 @@ const Images = {
 
   renderRow(img) {
     const tags = (img.RepoTags || []).filter(t => t !== '<none>:<none>');
-    const tagText = tags.length ? esc(tags[0]) : '<none>';
+    const tagText = tags.length
+      ? esc(tags[0])
+      : esc(I18n.t('images.untagged') || '无标签（可清理）');
     const moreCount = tags.length > 1 ? ` <span class="text-muted">+${tags.length - 1}</span>` : '';
 
     const created = img.Created ? formatDate(new Date(img.Created * 1000)) : '-';
@@ -270,8 +276,11 @@ const Images = {
   async confirmPrune() {
     const totals = this.data.totals || {};
     const buildCacheCount = totals.buildCacheCount || 0;
-    const unusedOnly = Math.max(0, (totals.unusedCount || 0) - buildCacheCount);
-    const totalPruneable = unusedOnly + buildCacheCount;
+    const danglingCount = totals.danglingCount || 0;
+    const unusedOnly = typeof totals.standaloneUnusedCount === 'number'
+      ? totals.standaloneUnusedCount
+      : Math.max(0, (totals.unusedCount || 0) - buildCacheCount - danglingCount);
+    const totalPruneable = unusedOnly + danglingCount + buildCacheCount;
     const unusedSize = totals.unusedSize || 0;
 
     if (totalPruneable === 0) {
@@ -284,6 +293,7 @@ const Images = {
     // "truly unused" and "build cache" images.
     const rows = [
       `<div class="rm-row"><span class="rm-label">${I18n.t('images.unusedCount') || '未使用镜像'}</span><span class="rm-value">${unusedOnly} 个</span></div>`,
+      `<div class="rm-row"><span class="rm-label">${I18n.t('images.dangling') || '无标签遗留镜像'}</span><span class="rm-value">${danglingCount} 个</span></div>`,
       `<div class="rm-row"><span class="rm-label">${I18n.t('images.buildCache') || '构建缓存'}</span><span class="rm-value">${buildCacheCount} 个</span></div>`,
       `<div class="rm-row"><span class="rm-label">${I18n.t('images.unusedSize') || '可释放空间'}</span><span class="rm-value">${formatBytes(unusedSize)}</span></div>`
     ].join('');
@@ -394,7 +404,7 @@ const Images = {
     const content = `
       <div class="rm-info">
         <div class="rm-row"><span class="rm-label">ID</span><span class="rm-value"><span class="commit-sha">${esc(img.Id)}</span></span></div>
-        <div class="rm-row"><span class="rm-label">${I18n.t('images.repoTags') || 'Tags'}</span><span class="rm-value"><small>${tags.length ? tags.map(esc).join('<br>') : '<none>'}</small></span></div>
+        <div class="rm-row"><span class="rm-label">${I18n.t('images.repoTags') || 'Tags'}</span><span class="rm-value"><small>${tags.length ? tags.map(esc).join('<br>') : esc(I18n.t('images.untagged') || '无标签（可清理）')}</small></span></div>
         <div class="rm-row"><span class="rm-label">${I18n.t('images.size') || '大小'}</span><span class="rm-value">${formatBytes(img.Size || 0)}</span></div>
         <div class="rm-row"><span class="rm-label">${I18n.t('images.created') || '创建时间'}</span><span class="rm-value"><small>${esc(created)}</small></span></div>
       </div>

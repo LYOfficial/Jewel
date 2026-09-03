@@ -44,6 +44,29 @@ container_exists() {
   docker container inspect "$1" >/dev/null 2>&1
 }
 
+# Each successful self-update retags the former `jewel:latest` image.  Once
+# its rollback container has been removed, that old image becomes a dangling
+# (`<none>`) image.  Leaving it around on every update eventually fills the
+# Images page with anonymous, full-sized historical Jewel images.
+#
+# Limit cleanup to Jewel images.  The label identifies new builds; the
+# command/JEWEL_COMMIT fallback also recognizes images made by older Jewel
+# installers before the label existed.  Docker still refuses to remove an
+# image if any container references it, so this is safe around rollbacks.
+cleanup_stale_jewel_images() {
+  docker image ls -a --filter dangling=true --quiet 2>/dev/null | while IFS= read -r image_id; do
+    [ -n "$image_id" ] || continue
+
+    image_managed="$(docker image inspect --format '{{with .Config.Labels}}{{index . "io.jewel.managed"}}{{end}}' "$image_id" 2>/dev/null || true)"
+    image_signature="$(docker image inspect --format '{{.Config.WorkingDir}}|{{range .Config.Cmd}}{{.}} {{end}}' "$image_id" 2>/dev/null || true)"
+    image_commit="$(docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$image_id" 2>/dev/null | sed -n 's/^JEWEL_COMMIT=//p' | head -n 1)"
+
+    if [ "$image_managed" = "true" ] || { [ "$image_signature" = "/app|node src/index.js " ] && [ -n "$image_commit" ]; }; then
+      docker image rm "$image_id" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 read_container_env() {
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null \
     | sed -n "s/^$1=//p" \
@@ -232,6 +255,7 @@ if container_exists "$ROLLBACK_CONTAINER"; then
   docker rm "$ROLLBACK_CONTAINER" >/dev/null 2>&1 || true
 fi
 docker image rm "$CANDIDATE_IMAGE" >/dev/null 2>&1 || true
+cleanup_stale_jewel_images
 
 echo ""
 echo "==> Jewel is running at http://localhost:${PORT}"

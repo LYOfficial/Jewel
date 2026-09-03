@@ -1,6 +1,6 @@
 {
   "name": "jewel",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Jewel - Next-generation lightweight git-to-docker deployment tool",
   "main": "src/index.js",
   "scripts": {

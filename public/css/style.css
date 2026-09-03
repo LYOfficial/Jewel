@@ -1656,6 +1656,24 @@ body {
 html[data-theme="light"] .nav-icon img { filter: none; opacity: .66; }
 html[data-theme="light"] .nav-item.active .nav-icon img { opacity: 1; filter: invert(42%) sepia(87%) saturate(2361%) hue-rotate(202deg) brightness(101%) contrast(93%); }
 .sidebar-footer { border-top-color: var(--line); }
+.sidebar-github-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin-top: 8px;
+  padding: 0 10px;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: 9px;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 650;
+  transition: color .18s ease, background .18s ease, border-color .18s ease;
+}
+.sidebar-github-link svg { width: 17px; height: 17px; fill: currentColor; flex: 0 0 auto; }
+.sidebar-github-link:hover { color: var(--text-primary); border-color: var(--line); background: var(--surface-hover); }
+.sidebar-github-version { margin-left: auto; color: var(--text-muted); font-size: 10px; font-weight: 560; }
 
 .main-content { background: transparent; }
 .topbar {

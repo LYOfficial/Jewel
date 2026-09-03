@@ -1859,3 +1859,154 @@ html[data-theme="light"] .login-right { background: var(--surface-raised); }
 @media (max-width: 960px) {
   .settings-grid { grid-template-columns: 1fr; }
 }
+
+/* ====== Fixed desktop workspace / scrollable card content ======
+   Desktop keeps navigation and page framing stationary. Tables and dense
+   cards receive the scroll area only when their content outgrows the viewport.
+   On touch-sized screens this is deliberately reset below to normal document
+   scrolling, which is more usable than nested scrolling on a phone. */
+@media (min-width: 769px) {
+  html, body, .app-layout { height: 100%; overflow: hidden; }
+  .main-content { height: 100%; min-height: 0; overflow: hidden; }
+  .content-area {
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+    padding: 20px 28px 24px;
+  }
+  .page-shell { flex: 1 1 auto; min-width: 0; height: 100%; min-height: 0; }
+
+  .list-page { display: flex; flex-direction: column; overflow: hidden; }
+  .list-page > .section-card {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    max-height: 100%;
+    min-height: 0;
+    margin-bottom: 0;
+  }
+  .list-page .section-card-header { flex: 0 0 auto; }
+  .list-page .table-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .dashboard-page {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow: hidden;
+  }
+  .dashboard-page > .card,
+  .dashboard-page > .monitor-grid,
+  .dashboard-page > .dash-row { margin: 0; }
+  .dashboard-page #sysInfoCard,
+  .dashboard-page > .monitor-grid,
+  .dashboard-page > .card:not(.dash-half) { flex: 0 0 auto; }
+  .dashboard-page .monitor-grid { margin-bottom: 0; }
+  .dashboard-page .ring-card { min-height: 0; padding: 12px; }
+  .dashboard-page .ring-wrap { margin-bottom: 4px; }
+  .dashboard-page .ring-wrap canvas { width: 88px; height: 88px; }
+  .dashboard-page .dash-row {
+    flex: 1 1 220px;
+    min-height: 0;
+    max-height: 300px;
+    overflow: hidden;
+  }
+  .dashboard-page .dash-half {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin-bottom: 0;
+    overflow: hidden;
+  }
+  .dashboard-page .dash-half .card-header { flex: 0 0 auto; }
+  .dashboard-page #recentProjects {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .dashboard-page .notebook-card { height: auto; max-height: none; }
+  .dashboard-page .notebook-content,
+  .dashboard-page .notebook-content .note-body { min-height: 0; }
+
+  .backups-page {
+    display: grid;
+    grid-template-rows: auto minmax(0, .9fr) minmax(0, 1.1fr);
+    gap: 14px;
+    overflow: hidden;
+  }
+  .backups-page > .stats-grid { margin-bottom: 0; }
+  .backups-page > .section-card,
+  .backups-page .resource-grid,
+  .backups-page .resource-grid > .section-card { min-height: 0; margin: 0; }
+  .backups-page > .section-card,
+  .backups-page .resource-grid > .section-card {
+    display: flex;
+    flex-direction: column;
+  }
+  .backups-page .resource-grid { gap: 14px; }
+  .backups-page #backupPlans,
+  .backups-page #backupProviders,
+  .backups-page #backupTasks {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .settings-page { display: flex; flex-direction: column; overflow: hidden; }
+  .settings-page .settings-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
+  }
+  .settings-page .settings-grid .card {
+    min-height: 0 !important;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 960px) {
+  .content-area { padding: 16px 18px 20px; }
+  .settings-page .settings-grid { grid-template-columns: 1fr; grid-template-rows: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (min-width: 769px) and (max-height: 760px) {
+  .content-area { padding-top: 12px; padding-bottom: 14px; }
+  .dashboard-page { gap: 10px; }
+  .dashboard-page .ring-card { padding: 8px; }
+  .dashboard-page .ring-wrap canvas { width: 66px; height: 66px; }
+  .dashboard-page .dash-row { flex-basis: 150px; max-height: 220px; }
+  .section-card { padding: 16px; }
+}
+
+@media (max-width: 768px) {
+  html, body { height: auto; min-height: 100%; overflow: auto; }
+  .app-layout, .main-content { height: auto; min-height: 100vh; overflow: visible; }
+  .content-area { display: block; min-height: calc(100vh - 70px); overflow: visible; }
+  .page-shell,
+  .list-page,
+  .dashboard-page,
+  .backups-page,
+  .settings-page { display: block; height: auto; min-height: 0; overflow: visible; }
+  .list-page > .section-card,
+  .backups-page > .section-card,
+  .backups-page .resource-grid > .section-card,
+  .settings-page .settings-grid .card { max-height: none; overflow: visible; }
+  .dashboard-page .dash-row { display: grid; max-height: none; overflow: visible; }
+  .dashboard-page .dash-half { margin-bottom: 16px; }
+  .dashboard-page #recentProjects { max-height: 300px; overflow: auto; }
+  .dashboard-page .notebook-card { height: 380px; max-height: 380px; }
+  .backups-page .resource-grid { gap: 16px; }
+  .settings-page .settings-grid { display: grid; }
+}

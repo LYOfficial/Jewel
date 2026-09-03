@@ -1,7 +1,7 @@
 const Projects = {
   async render(container) {
     container.innerHTML = `
-      <div class="page-shell">
+      <div class="page-shell list-page projects-page">
         <section class="section-card">
           <div class="section-card-header">
             <div><h3 data-i18n="project.list">项目列表</h3><p data-i18n="project.listHint">选择项目查看部署配置、日志和运行资源。</p></div>

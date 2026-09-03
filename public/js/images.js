@@ -4,7 +4,7 @@ const Images = {
 
   async render(container) {
     container.innerHTML = `
-      <div class="page-shell">
+      <div class="page-shell list-page images-page">
         <section class="section-card">
           <div class="section-card-header">
             <div><h3 data-i18n="images.list">镜像列表</h3><p id="imagesSummary"></p></div>

@@ -12,7 +12,7 @@ const Backups = {
 
   async render(container) {
     container.innerHTML = `
-      <div class="page-shell">
+      <div class="page-shell backups-page">
         <div id="backupOverview" class="stats-grid"></div>
         <section class="section-card">
           <div class="section-card-header">

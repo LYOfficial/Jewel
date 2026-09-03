@@ -169,8 +169,8 @@ function getNetworkStats() {
 const fs = require('fs');
 
 router.get('/update/check', async (req, res) => {
-  // Always do a live check when user explicitly asks
-  await updateService.checkForUpdate();
+  // A normal page load reads the most recently cached state. It must not
+  // block the settings page or the top-bar poll on an external GitHub call.
   res.json(await updateService.getUpdateInfo());
 });
 

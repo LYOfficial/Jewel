@@ -3,6 +3,10 @@
 // this lock keeps scheduled and user-triggered operations from overlapping.
 const projectLocks = new Map();
 
+function isProjectOperationLocked(projectId) {
+  return projectLocks.has(String(projectId));
+}
+
 function withProjectOperationLock(projectId, fn) {
   const key = String(projectId);
   const previous = projectLocks.get(key) || Promise.resolve();
@@ -17,4 +21,4 @@ function withProjectOperationLock(projectId, fn) {
   });
 }
 
-module.exports = { withProjectOperationLock };
+module.exports = { withProjectOperationLock, isProjectOperationLocked };

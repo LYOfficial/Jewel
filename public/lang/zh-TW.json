@@ -130,6 +130,8 @@
   "project.actions": "操作",
   "project.autoDeploy": "自動更新部署",
   "project.autoDeployHint": "每 10 分鐘檢查一次；偵測到新 Commit 時自動拉取並重新部署正在執行的專案。已停止的專案只會標記更新，不會自動啟動。",
+  "project.checkUpdateInProgress": "已有檢查或部署工作正在進行，現顯示最近一次已知狀態。",
+  "project.checkUpdateFailed": "檢查更新未完成",
   "project.reuseVolumes": "複用本地掛載卷",
   "project.reuseVolumesHint": "勾選後，若主機上已有同名容器，將先刪除該容器（僅刪容器，保留掛載卷），然後用新設定建立容器並複用原資料。",
   "project.reuseVolumesWarning": "⚠ 即將複用本地掛載卷",

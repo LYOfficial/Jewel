@@ -365,7 +365,7 @@ router.post('/:id/restart', async (req, res) => {
 
 router.post('/:id/check-update', async (req, res) => {
   try {
-    const updated = await projectUpdateService.checkProjectUpdate(req.params.id);
+    const updated = await projectUpdateService.checkProjectUpdate(req.params.id, { waitForLock: false });
     if (!updated) return res.status(404).json({ error: 'Project not found' });
     res.json(updated);
   } catch (err) {

@@ -1,7 +1,15 @@
 const { simpleGit } = require('simple-git');
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const config = require('./config');
+
+const execFileAsync = promisify(execFile);
+// A check is a lightweight status action. Cap only its remote fetch so an
+// unreachable Git host cannot hold the UI request open forever. Deployment
+// pulls continue to use pullRepo() without this short timeout.
+const GIT_FETCH_TIMEOUT_MS = Math.max(1000, Number.parseInt(process.env.GIT_FETCH_TIMEOUT_MS, 10) || 10000);
 
 // ============================================================
 // Concurrency control
@@ -252,14 +260,32 @@ function getRepoCommit(projectId) {
   }
 }
 
-async function fetchRepo(projectId) {
+async function fetchRepo(projectId, branch = 'main') {
   const projectDir = path.join(config.dataDir, 'projects', String(projectId));
   if (!fs.existsSync(projectDir)) {
     throw new Error('Project directory not found');
   }
+  const remoteBranch = String(branch || 'main').replace(/^refs\/heads\//, '');
+  const refspec = `+refs/heads/${remoteBranch}:refs/remotes/origin/${remoteBranch}`;
   return withGitLock(projectDir, () => withGitGate(async () => {
-    const git = getGit(projectDir);
-    await git.fetch('origin');
+    try {
+      // Do not download every remote ref/tag for a status check. This keeps
+      // large repositories responsive. The explicit refspec also refreshes
+      // origin/<branch>; `git fetch origin <branch>` only guarantees
+      // FETCH_HEAD and can leave that tracking ref stale.
+      await execFileAsync('git', ['fetch', '--no-tags', 'origin', refspec], {
+        cwd: projectDir,
+        timeout: GIT_FETCH_TIMEOUT_MS,
+        windowsHide: true,
+        maxBuffer: 1024 * 1024,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+      });
+    } catch (err) {
+      if (err && err.killed) {
+        throw new Error(`Remote update check timed out after ${Math.round(GIT_FETCH_TIMEOUT_MS / 1000)} seconds`);
+      }
+      throw err;
+    }
     return projectDir;
   }));
 }

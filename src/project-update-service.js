@@ -3,7 +3,7 @@ const gitService = require('./git-service');
 const dockerService = require('./docker-service');
 const operationService = require('./operation-service');
 const { tailLines } = require('./diagnostics');
-const { withProjectOperationLock } = require('./project-operation-lock');
+const { withProjectOperationLock, isProjectOperationLocked } = require('./project-operation-lock');
 
 // Stagger checkProjectUpdates across the periodic interval so we don't
 // fork N git+git-remote-https processes back-to-back for every project.
@@ -60,7 +60,14 @@ async function runAutomaticDeployment(project) {
   }
 }
 
-async function checkProjectUpdate(projectId, { autoDeploy = false } = {}) {
+async function checkProjectUpdate(projectId, { autoDeploy = false, waitForLock = true } = {}) {
+  // Never make a manual click wait behind a scheduled check or a Compose
+  // deployment. The in-flight task will persist the fresh result itself.
+  if (!waitForLock && isProjectOperationLocked(projectId)) {
+    const project = db.prepare('SELECT * FROM projects WHERE id=?').get(projectId);
+    return project ? { ...project, update_check_pending: true } : null;
+  }
+
   return withProjectOperationLock(projectId, async () => {
     const project = db.prepare('SELECT * FROM projects WHERE id=?').get(projectId);
     if (!project) return null;
@@ -69,7 +76,7 @@ async function checkProjectUpdate(projectId, { autoDeploy = false } = {}) {
       const localCommit = await gitService.getRepoCommit(project.id);
       if (!localCommit) return db.prepare('SELECT * FROM projects WHERE id=?').get(project.id);
 
-      await gitService.fetchRepo(project.id);
+      await gitService.fetchRepo(project.id, project.git_branch);
       // Read HEAD after fetch so a queued manual deployment cannot leave us
       // persisting the commit value from before it completed.
       const currentCommit = await gitService.getRepoCommit(project.id);
@@ -89,7 +96,8 @@ async function checkProjectUpdate(projectId, { autoDeploy = false } = {}) {
       return db.prepare('SELECT * FROM projects WHERE id=?').get(project.id);
     } catch (err) {
       console.error(`Failed to check update for project ${project.id}:`, err.message);
-      return db.prepare('SELECT * FROM projects WHERE id=?').get(project.id);
+      const current = db.prepare('SELECT * FROM projects WHERE id=?').get(project.id);
+      return current ? { ...current, update_check_error: err.message } : null;
     }
   });
 }
@@ -98,7 +106,10 @@ function checkProjectUpdates() {
   if (updateCheckPromise) return updateCheckPromise;
 
   updateCheckPromise = (async () => {
-    const projects = db.prepare('SELECT id FROM projects').all();
+    // Background work is only for projects where automatic deployment is
+    // enabled. Previously every repository was fetched on startup and each
+    // manual check could queue behind unrelated projects.
+    const projects = db.prepare('SELECT id FROM projects WHERE auto_deploy=1').all();
 
     for (let i = 0; i < projects.length; i++) {
       await checkProjectUpdate(projects[i].id, { autoDeploy: true });

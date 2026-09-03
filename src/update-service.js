@@ -10,6 +10,10 @@ let latestRemoteInfo = null;
 let currentCommit = null;
 let updating = false;
 let lastCheckTime = null;
+let currentCommitInfo = null;
+let updateCheckPromise = null;
+
+const UPDATE_CHECK_TIMEOUT_MS = 5000;
 
 const COMMIT_FILE = path.join(config.dataDir, '.jewel-commit');
 const UPDATING_FILE = path.join(config.dataDir, '.jewel-updating');
@@ -104,7 +108,7 @@ async function getCurrentCommitInfo() {
     });
 
     req.on('error', () => resolve(null));
-    req.setTimeout(10000, () => { req.destroy(); resolve(null); });
+    req.setTimeout(UPDATE_CHECK_TIMEOUT_MS, () => { req.destroy(); resolve(null); });
     req.end();
   });
 }
@@ -154,15 +158,17 @@ async function getLatestCommitInfo() {
       console.error('GitHub API request error:', err.message);
       resolve(null);
     });
-    req.setTimeout(10000, () => { req.destroy(); resolve(null); });
+    req.setTimeout(UPDATE_CHECK_TIMEOUT_MS, () => { req.destroy(); resolve(null); });
     req.end();
   });
 }
 
-async function checkForUpdate() {
-  if (isUpdating()) return false;
+function checkForUpdate() {
+  if (isUpdating()) return Promise.resolve(false);
+  if (updateCheckPromise) return updateCheckPromise;
 
-  try {
+  updateCheckPromise = (async () => {
+    try {
     const remote = await getLatestCommitInfo();
     lastCheckTime = new Date().toISOString();
 
@@ -189,35 +195,32 @@ async function checkForUpdate() {
     }
 
     if (remote.sha !== current) {
+      if (currentCommitInfo?.sha !== current) currentCommitInfo = null;
       updateAvailable = true;
       latestRemoteInfo = remote;
       return true;
     }
 
+    // When current and remote are equal, the remote response is also the
+    // current commit metadata. Cache it so status reads remain local.
+    currentCommitInfo = remote;
     updateAvailable = false;
     latestRemoteInfo = null;
     return false;
-  } catch (err) {
-    console.error('Check update error:', err.message);
-    return false;
-  }
+    } catch (err) {
+      console.error('Check update error:', err.message);
+      return false;
+    }
+  })().finally(() => { updateCheckPromise = null; });
+
+  return updateCheckPromise;
 }
 
 async function getUpdateInfo() {
   const current = detectCurrentCommit();
-  let currentDate = detectCurrentDate();
-  let currentMessage = null;
-  let currentVersionFromCommit = null;
-
-  // If we can't detect date from local git, try fetching it from GitHub API
-  if (!currentDate && current && current !== 'unknown') {
-    const info = await getCurrentCommitInfo();
-    if (info) {
-      currentDate = info.date;
-      currentMessage = info.message;
-      currentVersionFromCommit = detectLatestVersion(info.message);
-    }
-  }
+  const currentDate = detectCurrentDate() || (currentCommitInfo?.sha === current ? currentCommitInfo.date : null);
+  const currentMessage = currentCommitInfo?.sha === current ? currentCommitInfo.message : null;
+  const currentVersionFromCommit = detectLatestVersion(currentMessage);
 
   return {
     available: updateAvailable,

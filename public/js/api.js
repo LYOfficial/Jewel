@@ -12,7 +12,7 @@ const API = {
     localStorage.removeItem('jewel-token');
   },
 
-  async request(method, path, body = null) {
+  async request(method, path, body = null, { timeoutMs = 12000 } = {}) {
     const headers = { 'Content-Type': 'application/json' };
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
 
@@ -20,10 +20,22 @@ const API = {
     if (body) options.body = JSON.stringify(body);
 
     let res;
+    let timeoutId = null;
+    let controller = null;
+    if (typeof AbortController !== 'undefined' && timeoutMs > 0) {
+      controller = new AbortController();
+      options.signal = controller.signal;
+      timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    }
     try {
       res = await fetch(`${this.baseUrl}${path}`, options);
     } catch (err) {
+      if (controller && controller.signal.aborted) {
+        throw new Error(`Request timed out after ${Math.ceil(timeoutMs / 1000)} seconds`);
+      }
       throw new Error('Network error: ' + (err && err.message ? err.message : 'fetch failed'));
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
 
     if (res.status === 401) {
@@ -87,10 +99,10 @@ const API = {
     return data;
   },
 
-  get(path) { return this.request('GET', path); },
-  post(path, body) { return this.request('POST', path, body); },
-  put(path, body) { return this.request('PUT', path, body); },
-  del(path) { return this.request('DELETE', path); },
+  get(path, options) { return this.request('GET', path, null, options); },
+  post(path, body, options) { return this.request('POST', path, body, options); },
+  put(path, body, options) { return this.request('PUT', path, body, options); },
+  del(path, options) { return this.request('DELETE', path, null, options); },
 
   // Auth
   login(username, password) { return this.post('/auth/login', { username, password }); },
@@ -105,8 +117,8 @@ const API = {
   updateProject(id, data) { return this.put(`/projects/${id}`, data); },
   updateProjectEnv(id, env_vars) { return this.put(`/projects/${id}/env`, { env_vars }); },
   deleteProject(id) { return this.del(`/projects/${id}`); },
-  deployProject(id, options) { return this.post(`/projects/${id}/deploy`, options); },
-  rebuildProject(id) { return this.post(`/projects/${id}/rebuild`); },
+  deployProject(id, options) { return this.post(`/projects/${id}/deploy`, options, { timeoutMs: 0 }); },
+  rebuildProject(id) { return this.post(`/projects/${id}/rebuild`, null, { timeoutMs: 0 }); },
   stopProject(id) { return this.post(`/projects/${id}/stop`); },
   restartProject(id) { return this.post(`/projects/${id}/restart`); },
   getProjectContainers(id) { return this.get(`/projects/${id}/containers`); },
@@ -187,7 +199,7 @@ const API = {
   createBackupPlan(data) { return this.post('/backups/plans', data); },
   updateBackupPlan(id, data) { return this.put(`/backups/plans/${id}`, data); },
   deleteBackupPlan(id) { return this.del(`/backups/plans/${id}`); },
-  runBackupPlan(id) { return this.post(`/backups/plans/${id}/run`); },
+  runBackupPlan(id) { return this.post(`/backups/plans/${id}/run`, null, { timeoutMs: 0 }); },
   getBackupTasks(limit = 50) { return this.get(`/backups/tasks?limit=${limit}`); },
   getBackupTask(id) { return this.get(`/backups/tasks/${id}`); },
 
@@ -195,7 +207,7 @@ const API = {
   getSystemInfo() { return this.get('/system/info'); },
   getMonitor() { return this.get('/system/monitor'); },
   checkUpdate() { return this.get('/system/update/check'); },
-  forceCheckUpdate() { return this.post('/system/update/check'); },
+  forceCheckUpdate() { return this.post('/system/update/check', null, { timeoutMs: 7000 }); },
   applyUpdate() { return this.post('/system/update/apply'); },
   getSettings() { return this.get('/system/settings'); },
   updateSettings(data) { return this.put('/system/settings', data); },

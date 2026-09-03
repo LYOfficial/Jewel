@@ -69,8 +69,10 @@ setInterval(() => {
   projectUpdateService.checkProjectUpdates().catch(() => {});
 }, PROJECT_UPDATE_INTERVAL_MS);
 
-updateService.checkForUpdate().catch(() => {});
-projectUpdateService.checkProjectUpdates().catch(() => {});
+// Give the HTTP server a short head start. This keeps first-page navigation
+// responsive while the optional background checks begin after startup.
+setTimeout(() => updateService.checkForUpdate().catch(() => {}), 1000);
+setTimeout(() => projectUpdateService.checkProjectUpdates().catch(() => {}), 5000);
 backupService.startScheduler();
 
 // Clear stale updating flag on startup (means we successfully restarted after update)

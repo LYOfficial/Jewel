@@ -19,6 +19,9 @@ function createDatabase(projects) {
     prepare(sql) {
       const query = sql.replace(/\s+/g, ' ').trim();
       if (query === 'SELECT * FROM projects WHERE id=?') return { get: getProject };
+      if (query === 'SELECT id FROM projects WHERE auto_deploy=1') {
+        return { all: () => [...byId.values()].filter(project => project.auto_deploy).map(project => ({ id: project.id })) };
+      }
       if (query === 'SELECT commit_hash FROM projects WHERE id = ?') {
         return { get: id => {
           const project = getProject(id);
@@ -189,6 +192,59 @@ test('a project with automatic updates disabled only records the available commi
     assert.equal(project.update_available, 1);
     assert.equal(harness.operations.length, 0);
   } finally {
+    harness.restore();
+  }
+});
+
+test('the automatic scheduler only fetches projects that opted in', async () => {
+  const fetched = [];
+  const harness = loadService({
+    projects: [
+      { id: 4, name: 'automatic', git_branch: 'main', auto_deploy: 1, status: 'running', commit_hash: 'same', remote_commit: '', update_available: 0 },
+      { id: 5, name: 'manual-only', git_branch: 'main', auto_deploy: 0, status: 'running', commit_hash: 'same', remote_commit: '', update_available: 0 }
+    ],
+    gitService: {
+      getRepoCommit: async () => 'same',
+      fetchRepo: async id => { fetched.push(id); },
+      getRemoteCommit: async () => 'same',
+      prepareManagedEnvFileForPull: async () => {},
+      pullRepo: async () => {}
+    },
+    dockerService: { deployProject: async () => '', readDeployLog: () => '' }
+  });
+
+  try {
+    await harness.service.checkProjectUpdates();
+    assert.deepEqual(fetched, [4]);
+  } finally {
+    harness.restore();
+  }
+});
+
+test('a manual check immediately returns cached state when a project is busy', async () => {
+  const lock = require('../src/project-operation-lock');
+  let release;
+  const blocker = lock.withProjectOperationLock(6, () => new Promise(resolve => { release = resolve; }));
+  const harness = loadService({
+    projects: [{ id: 6, name: 'busy', git_branch: 'main', auto_deploy: 1, status: 'deploying', commit_hash: 'local', remote_commit: '', update_available: 0 }],
+    gitService: {
+      getRepoCommit: async () => 'local',
+      fetchRepo: async () => { throw new Error('manual check should not fetch'); },
+      getRemoteCommit: async () => 'local',
+      prepareManagedEnvFileForPull: async () => {},
+      pullRepo: async () => {}
+    },
+    dockerService: { deployProject: async () => '', readDeployLog: () => '' }
+  });
+
+  try {
+    const project = await harness.service.checkProjectUpdate(6, { waitForLock: false });
+    assert.equal(project.update_check_pending, true);
+    assert.equal(project.status, 'deploying');
+  } finally {
+    await Promise.resolve();
+    release();
+    await blocker;
     harness.restore();
   }
 });

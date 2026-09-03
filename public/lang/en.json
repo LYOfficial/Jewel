@@ -130,6 +130,8 @@
   "project.actions": "Actions",
   "project.autoDeploy": "Automatic update deployment",
   "project.autoDeployHint": "Checks every 10 minutes and redeploys a running project when a new commit is found. Stopped projects are only marked as having an update.",
+  "project.checkUpdateInProgress": "An update check or deployment is already running. Showing the latest known status.",
+  "project.checkUpdateFailed": "Could not complete the update check",
   "project.reuseVolumes": "Reuse existing mount volumes",
   "project.reuseVolumesHint": "If a container with the same name already exists on the host, it will be removed first (container only, volumes are kept), then a new container will be created with the new config and reuse the original data.",
   "project.reuseVolumesWarning": "⚠ About to reuse local mount volumes",

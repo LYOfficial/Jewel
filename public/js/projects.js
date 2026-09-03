@@ -391,7 +391,11 @@ const Projects = {
     try {
       Notify.info(I18n.t('project.checkUpdate') || 'Checking for updates...');
       const updated = await API.checkProjectUpdate(id);
-      if (updated.update_available) {
+      if (updated.update_check_pending) {
+        Notify.info(I18n.t('project.checkUpdateInProgress') || 'An update check or deployment is already in progress. Showing the latest known status.');
+      } else if (updated.update_check_error) {
+        Notify.error(`${I18n.t('project.checkUpdateFailed') || 'Could not complete the update check'}: ${updated.update_check_error}`);
+      } else if (updated.update_available) {
         Notify.info(I18n.t('project.updateAvailable') || 'Update available');
       } else {
         Notify.success(I18n.t('project.upToDate') || 'Up to date');

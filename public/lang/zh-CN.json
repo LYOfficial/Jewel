@@ -129,6 +129,8 @@
   "project.manualInput": "手动输入...",
   "project.containerName": "容器名（选填）",
   "project.actions": "操作",
+  "project.autoDeploy": "自动更新部署",
+  "project.autoDeployHint": "每 10 分钟检查一次；发现新提交后自动拉取并重新部署正在运行的项目。已停止项目只会标记更新，不会自动启动。",
   "project.reuseVolumes": "复用本地挂载卷",
   "project.reuseVolumesHint": "勾选后，若主机上已有同名容器，将先删除该容器（仅删容器，保留挂载卷），然后用新配置创建容器并复用原数据。",
   "project.reuseVolumesWarning": "⚠ 即将复用本地挂载卷",

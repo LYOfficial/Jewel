@@ -6,6 +6,7 @@ const { authMiddleware } = require('./auth');
 const gitService = require('./git-service');
 const dockerService = require('./docker-service');
 const projectUpdateService = require('./project-update-service');
+const { withProjectOperationLock } = require('./project-operation-lock');
 const operationService = require('./operation-service');
 const { redactSecrets, tailLines } = require('./diagnostics');
 const backupService = require('./backup-service');
@@ -76,31 +77,33 @@ async function snapshotOperationCommit(operationId, projectId) {
 }
 
 async function runProjectOperation({ res, project, action, activeStatus, successStatus, work, summary, response }) {
-  const operationId = operationService.start({
-    projectId: project.id,
-    action,
-    metadata: { project_name: project.name }
+  return withProjectOperationLock(project.id, async () => {
+    const operationId = operationService.start({
+      projectId: project.id,
+      action,
+      metadata: { project_name: project.name }
+    });
+    try {
+      if (activeStatus) db.prepare('UPDATE projects SET status=? WHERE id=?').run(activeStatus, project.id);
+      const result = await work();
+      if (successStatus) db.prepare('UPDATE projects SET status=? WHERE id=?').run(successStatus, project.id);
+      await snapshotOperationCommit(operationId, project.id);
+      const operation = operationService.succeed(operationId, {
+        summary: typeof summary === 'function' ? summary(result) : summary,
+        detail: result && result.output ? tailLines(result.output, 80) : ''
+      });
+      const payload = typeof response === 'function' ? response(result) : (result || {});
+      return res.json({ ...payload, operation_id: operation.id });
+    } catch (err) {
+      if (activeStatus) db.prepare('UPDATE projects SET status=? WHERE id=?').run('error', project.id);
+      await snapshotOperationCommit(operationId, project.id);
+      const operation = operationService.fail(operationId, err, {
+        summary: `${action} failed for ${project.name}`,
+        detail: tailLines(dockerService.readDeployLog(project.id), 400)
+      });
+      return operationErrorResponse(res, project, operation, err);
+    }
   });
-  try {
-    if (activeStatus) db.prepare('UPDATE projects SET status=? WHERE id=?').run(activeStatus, project.id);
-    const result = await work();
-    if (successStatus) db.prepare('UPDATE projects SET status=? WHERE id=?').run(successStatus, project.id);
-    await snapshotOperationCommit(operationId, project.id);
-    const operation = operationService.succeed(operationId, {
-      summary: typeof summary === 'function' ? summary(result) : summary,
-      detail: result && result.output ? tailLines(result.output, 80) : ''
-    });
-    const payload = typeof response === 'function' ? response(result) : (result || {});
-    return res.json({ ...payload, operation_id: operation.id });
-  } catch (err) {
-    if (activeStatus) db.prepare('UPDATE projects SET status=? WHERE id=?').run('error', project.id);
-    await snapshotOperationCommit(operationId, project.id);
-    const operation = operationService.fail(operationId, err, {
-      summary: `${action} failed for ${project.name}`,
-      detail: tailLines(dockerService.readDeployLog(project.id), 400)
-    });
-    return operationErrorResponse(res, project, operation, err);
-  }
 }
 
 router.get('/', (req, res) => {
@@ -115,15 +118,15 @@ router.get('/:id', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, git_url, git_token, git_branch, compose_path, env_vars, container_name, reuse_volumes } = req.body;
+  const { name, git_url, git_token, git_branch, compose_path, env_vars, container_name, reuse_volumes, auto_deploy } = req.body;
 
   if (!name || !git_url) {
     return res.status(400).json({ error: 'Name and git_url are required' });
   }
 
   const result = db.prepare(`
-    INSERT INTO projects (name, git_url, git_token, git_branch, compose_path, env_vars, container_name, reuse_volumes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO projects (name, git_url, git_token, git_branch, compose_path, env_vars, container_name, reuse_volumes, auto_deploy)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name,
     git_url,
@@ -132,7 +135,8 @@ router.post('/', async (req, res) => {
     compose_path || 'docker-compose.yml',
     JSON.stringify(env_vars || {}),
     container_name || '',
-    reuse_volumes ? 1 : 0
+    reuse_volumes ? 1 : 0,
+    auto_deploy ? 1 : 0
   );
 
   const projectId = Number(result.lastInsertRowid);
@@ -171,11 +175,13 @@ router.put('/:id', async (req, res) => {
     compose_path = project.compose_path,
     env_vars,
     container_name,
-    reuse_volumes
+    reuse_volumes,
+    auto_deploy
   } = req.body;
 
   const containerNameVal = container_name !== undefined ? container_name : project.container_name;
   const reuseVolumesVal = reuse_volumes !== undefined ? (reuse_volumes ? 1 : 0) : project.reuse_volumes;
+  const autoDeployVal = auto_deploy !== undefined ? (auto_deploy ? 1 : 0) : project.auto_deploy;
 
   const repoChanged =
     git_url !== project.git_url ||
@@ -184,11 +190,11 @@ router.put('/:id', async (req, res) => {
 
   db.prepare(`
     UPDATE projects SET name=?, git_url=?, git_token=?, git_branch=?, compose_path=?,
-    env_vars=?, container_name=?, reuse_volumes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
+    env_vars=?, container_name=?, reuse_volumes=?, auto_deploy=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
   `).run(
     name, git_url, git_token, git_branch, compose_path,
     JSON.stringify(env_vars || (() => { try { return JSON.parse(project.env_vars); } catch { return {}; } })()),
-    containerNameVal, reuseVolumesVal, req.params.id
+    containerNameVal, reuseVolumesVal, autoDeployVal, req.params.id
   );
 
   if (repoChanged) {
@@ -253,8 +259,10 @@ router.delete('/:id', async (req, res) => {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
-  db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
-  res.json({ message: 'Project deleted' });
+  return withProjectOperationLock(project.id, () => {
+    db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
+    res.json({ message: 'Project deleted' });
+  });
 });
 
 router.post('/:id/deploy', async (req, res) => {
@@ -356,20 +364,9 @@ router.post('/:id/restart', async (req, res) => {
 });
 
 router.post('/:id/check-update', async (req, res) => {
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-
   try {
-    const localCommit = await gitService.getRepoCommit(project.id);
-    await gitService.fetchRepo(project.id);
-    const remoteCommit = await gitService.getRemoteCommit(project.id, project.git_branch);
-    const updateAvailable = remoteCommit && remoteCommit !== localCommit;
-
-    db.prepare(`
-      UPDATE projects SET commit_hash=?, remote_commit=?, update_available=?, last_update_check=CURRENT_TIMESTAMP WHERE id=?
-    `).run(localCommit || '', remoteCommit || '', updateAvailable ? 1 : 0, project.id);
-
-    const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+    const updated = await projectUpdateService.checkProjectUpdate(req.params.id);
+    if (!updated) return res.status(404).json({ error: 'Project not found' });
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });

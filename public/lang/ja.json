@@ -128,6 +128,8 @@
   "project.manualInput": "手動入力...",
   "project.containerName": "コンテナ名（任意）",
   "project.actions": "操作",
+  "project.autoDeploy": "自動更新デプロイ",
+  "project.autoDeployHint": "10 分ごとに確認し、新しいコミットが見つかると実行中のプロジェクトを自動で再デプロイします。停止中のプロジェクトは更新ありとして表示するだけです。",
   "project.reuseVolumes": "ローカルマウントボリュームを再利用",
   "project.reuseVolumesHint": "チェックすると、ホスト上に同名のコンテナが存在する場合、まずそのコンテナを削除し（コンテナのみ、ボリュームは保持）、新しい設定でコンテナを作成して元のデータを再利用します。",
   "project.reuseVolumesWarning": "⚠ ローカルマウントボリュームを再利用します",

@@ -114,6 +114,12 @@ const Projects = {
         </div>
       </div>
       <div class="form-group">
+        <label class="option-card">
+          <input type="checkbox" id="projAutoDeploy">
+          <span><strong data-i18n="project.autoDeploy">自动更新部署</strong><small data-i18n="project.autoDeployHint">每 10 分钟检查一次；发现新提交后自动拉取并重新部署正在运行的项目。已停止项目只会标记更新。</small></span>
+        </label>
+      </div>
+      <div class="form-group">
         <label class="experimental-label">
           <input type="checkbox" id="projReuseVolumes">
           <span data-i18n="project.reuseVolumes">复用本地挂载卷</span>
@@ -152,7 +158,8 @@ const Projects = {
       git_token: '',
       git_branch: document.getElementById('projBranch').value || 'main',
       compose_path: document.getElementById('projCompose').value || 'docker-compose.yml',
-      reuse_volumes: document.getElementById('projReuseVolumes').checked
+      reuse_volumes: document.getElementById('projReuseVolumes').checked,
+      auto_deploy: document.getElementById('projAutoDeploy').checked
     };
 
     if (tokenSelect === '__manual__') {
@@ -509,6 +516,12 @@ const Projects = {
           </div>
         </div>
         <div class="form-group">
+          <label class="option-card">
+            <input type="checkbox" id="detailAutoDeploy" ${project.auto_deploy ? 'checked' : ''}>
+            <span><strong data-i18n="project.autoDeploy">自动更新部署</strong><small data-i18n="project.autoDeployHint">每 10 分钟检查一次；发现新提交后自动拉取并重新部署正在运行的项目。已停止项目只会标记更新。</small></span>
+          </label>
+        </div>
+        <div class="form-group">
           <label class="experimental-label">
             <input type="checkbox" id="detailReuseVolumes" ${project.reuse_volumes ? 'checked' : ''}>
             <span data-i18n="project.reuseVolumes">复用本地挂载卷</span>
@@ -765,7 +778,8 @@ const Projects = {
       git_token: '',
       git_branch: document.getElementById('detailBranch').value,
       compose_path: document.getElementById('detailCompose').value,
-      reuse_volumes: document.getElementById('detailReuseVolumes').checked
+      reuse_volumes: document.getElementById('detailReuseVolumes').checked,
+      auto_deploy: document.getElementById('detailAutoDeploy').checked
     };
 
     if (tokenSelect === '__manual__') {

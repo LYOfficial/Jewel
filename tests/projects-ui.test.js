@@ -116,6 +116,10 @@ test('project details split the dashboard from deployment configuration', () => 
   assert.match(projectsSource, /projectMetricSummary/);
   assert.match(projectsSource, /loadDashboardResources/);
   assert.match(projectsSource, /operation\.commit_hash/);
+  assert.match(projectsSource, /id="projAutoDeploy"/);
+  assert.match(projectsSource, /id="detailAutoDeploy"/);
+  assert.match(projectsSource, /auto_deploy: document\.getElementById\('projAutoDeploy'\)\.checked/);
+  assert.match(projectsSource, /auto_deploy: document\.getElementById\('detailAutoDeploy'\)\.checked/);
 });
 
 test('project updates prepare a Jewel-managed .env file before pulling', () => {

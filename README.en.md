@@ -58,7 +58,7 @@ Jewel is a self-hosted deployment console inspired by Dokploy and Portainer. It 
 
 | Area | Capabilities |
 |---|---|
-| Project deployment | Clone a Git repository, select a branch and Compose file, edit environment variables, deploy, stop, restart, and rebuild |
+| Project deployment | Clone a Git repository, select a branch and Compose file, edit environment variables, deploy, stop, restart, and rebuild; optionally check for new commits and redeploy each project automatically |
 | Git integration | GitHub, GitLab, and self-hosted GitLab token management and repository selection |
 | Docker operations | Inspect and operate containers, images, ports, logs, statistics, mounts, terminals, and container files |
 | Resource relationships | Aggregate containers, images, named volumes, bind mounts, commit state, and operations per project |
@@ -83,6 +83,10 @@ flowchart LR
 ```
 
 The Jewel container manages the host Docker daemon through `/var/run/docker.sock`. Application state, the SQLite database, project working trees, and backup staging files live under `/data`.
+
+### Automatic project updates
+
+Enable **Automatic update deployment** when creating a project or in its deployment settings. Jewel checks the remote branch every 10 minutes, then pulls and redeploys a running project when a new commit is found. Results are recorded in the operation history and deploy log. A project that was manually stopped is only marked as having an update; it is never started automatically.
 
 ## Quick start
 

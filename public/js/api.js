@@ -188,6 +188,13 @@ const API = {
   updateToken(id, data) { return this.put(`/tokens/${id}`, data); },
   deleteToken(id) { return this.del(`/tokens/${id}`); },
 
+  // MCP credentials and audit history
+  getMcpConfig() { return this.get('/mcp/config'); },
+  getMcpTokens() { return this.get('/mcp/tokens'); },
+  createMcpToken(data) { return this.post('/mcp/tokens', data); },
+  revokeMcpToken(id) { return this.del(`/mcp/tokens/${id}`); },
+  getMcpAuditLogs(limit = 100) { return this.get(`/mcp/audit-logs?limit=${limit}`); },
+
   // Backup center
   getBackupVolumes(projectId = '') { return this.get(`/backups/volumes${projectId ? `?project_id=${projectId}` : ''}`); },
   getBackupProviders() { return this.get('/backups/providers'); },

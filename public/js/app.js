@@ -10,6 +10,7 @@ const App = {
     '/images': 'images',
     '/backups': 'backups',
     '/tokens': 'tokens',
+    '/mcp': 'mcp',
     '/settings': 'settings'
   },
   // Reverse map: internal page name -> canonical sub-path
@@ -20,6 +21,7 @@ const App = {
     images: '/images',
     backups: '/backups',
     tokens: '/tokens',
+    mcp: '/mcp',
     settings: '/settings'
   },
 
@@ -178,6 +180,7 @@ const App = {
         break;
       case 'backups': Backups.render(container); break;
       case 'tokens': Tokens.render(container); break;
+      case 'mcp': Mcp.render(container); break;
       case 'settings': Settings.render(container); break;
       default:
         // Unknown page — fall back to dashboard

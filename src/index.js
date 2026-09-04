@@ -13,6 +13,8 @@ const routesGit = require('./routes-git');
 const routesSystem = require('./routes-system');
 const routesTokens = require('./routes-tokens');
 const routesBackups = require('./routes-backups');
+const routesMcp = require('./routes-mcp');
+const routesMcpManagement = require('./routes-mcp-management');
 const backupService = require('./backup-service');
 
 const app = express();
@@ -39,10 +41,12 @@ app.use('/api/git', routesGit);
 app.use('/api/system', routesSystem);
 app.use('/api/tokens', routesTokens);
 app.use('/api/backups', routesBackups);
+app.use('/api/mcp', routesMcpManagement);
+app.use('/mcp', routesMcp);
 
 // Fallback error handler — ensure API errors return JSON, not HTML
 app.use((err, req, res, next) => {
-  if (req.path.startsWith('/api/')) {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/mcp')) {
     return res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
   }
   next(err);

@@ -222,6 +222,52 @@ Jewel 会检查 GitHub `main` 分支是否存在更新，但不会自动安装�
 | `/data/projects/` | 克隆的项目工作目录 |
 | `/data/backups/staging/` | 备份任务的本地暂存归档 |
 
+## MCP 服务：让 AI 在受限范围内维护 Jewel
+
+Jewel 内置了符合 **Streamable HTTP** 传输方式的 MCP 服务。支持 MCP 的 AI 客户端可以读取项目状态、操作历史、部署日志、失败诊断和运行日志，并在已有项目上执行部署、检查更新、拉取更新并部署、重构、重启，以及检查或应用 Jewel 自身更新。
+
+MCP **不会**提供项目/容器/镜像/卷删除、任意容器命令执行、文件读写、Git 凭据、环境变量或备份凭据读取能力。所有 MCP 工具调用会复用 Jewel 原有的项目锁、操作记录和敏感信息脱敏逻辑。
+
+### 获取 Access Key 与创建 Token
+
+1. 以管理员身份登录 Jewel，点击左侧 **MCP**；
+2. 复制页面中的 **MCP 地址** 和平台唯一的 **Access Key**；Access Key 首次使用 MCP 时自动生成，并和 Jewel 数据一起持久化；
+3. 点击“创建 Token”，为每个客户端取一个便于识别的名称，并设置有效时长（小时；`0` 表示永不过期）；
+4. 创建成功时立即复制完整 Token。为了安全，Jewel 数据库只保存 Token 哈希，关闭弹窗后不能再次显示完整 Token；
+5. 不再使用的客户端请在同一页面点击“撤销”。撤销后 Token 立刻失效，历史操作记录仍会保留。
+
+一个 Jewel 实例只有一个 Access Key，但可以创建多个 MCP Token。每一次连接必须同时校验二者；缺少、过期或已撤销的 Token 都无法使用。MCP 页面中的“Token 操作记录”可查看创建、撤销、鉴权失败及工具调用的时间、来源与结果。
+
+### 在 ChatGPT / Codex Desktop 中填写
+
+在“连接至自定义 MCP”的页面中按以下方式配置。截图中当前选中的是 **STDIO**；请切换为右侧的 **流式 HTTP**，因为 Jewel 是远程 HTTP MCP 服务，不需要填写启动命令、参数、环境变量传递或工作目录。
+
+| 字段 | 填写内容 |
+|---|---|
+| 名称 | `Jewel`（可自定义） |
+| 类型 | `流式 HTTP` / `Streamable HTTP` |
+| MCP 地址 / Server URL | `https://你的域名/mcp`，例如 `https://jewel.example.com/mcp` |
+| Header 1 名称 | `X-Jewel-Access-Key` |
+| Header 1 值 | MCP 页面中复制的平台 Access Key |
+| Header 2 名称 | `Authorization` |
+| Header 2 值 | `Bearer ` 加上新建的 MCP Token，例如 `Bearer jwl_mcp_xxx` |
+
+如果 Jewel 直接以默认端口对可信内网提供服务，地址可以是 `http://服务器地址:330/mcp`；公网部署必须经由 HTTPS 反向代理，并在代理中原样转发 `Authorization` 与 `X-Jewel-Access-Key` 两个请求头。**不要**把 Access Key 或 Token 拼接到 URL 查询参数中，也不要将其发到聊天、Issue 或日志里。
+
+保存后可先让客户端执行“列出 Jewel 项目”或“检查 Jewel 更新”验证连接。若客户端提示 401，请检查地址末尾是否为 `/mcp`、Token 是否仍有效，以及 `Authorization` 的值是否包含 `Bearer` 后的一个空格。
+
+### MCP 工具清单
+
+| 类别 | MCP 工具 | 行为 |
+|---|---|---|
+| 项目读取 | `jewel_list_projects`、`jewel_get_project`、`jewel_get_project_operations` | 读取项目与部署历史，不返回 Git Token 或环境变量 |
+| 更新判断 | `jewel_check_project_update` | 拉取远端提交信息并标记是否有更新，不部署 |
+| 项目维护 | `jewel_deploy_project`、`jewel_update_project`、`jewel_rebuild_project`、`jewel_restart_project` | 仅作用于已在 Jewel 中创建的项目；操作会写入网页端同一份历史与日志 |
+| 诊断读取 | `jewel_get_deploy_log`、`jewel_get_failure_report`、`jewel_get_runtime_logs` | 返回经过脱敏的日志尾部与失败诊断 |
+| Jewel 更新 | `jewel_check_self_update`、`jewel_apply_self_update` | 检查或启动 Jewel 自更新；应用更新会重启 Jewel 容器 |
+
+`jewel_update_project` 在 Git 拉取失败时会明确失败，避免误将旧代码当作更新部署；普通 `jewel_deploy_project` 在远端暂不可达时仍可按当前本地检出版本部署。`jewel_rebuild_project` 会停止该 Compose 项目、清理未使用镜像、重新克隆并部署，Docker 命名卷会保留。
+
 ## 本地开发
 
 本地开发需要 Node.js 20+ 和可访问的 Docker 守护进程：

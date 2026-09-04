@@ -231,7 +231,9 @@ router.post('/update/apply', async (req, res) => {
 });
 
 router.get('/settings', (req, res) => {
-  const settings = db.prepare('SELECT * FROM settings').all();
+  // MCP access credentials have their own authenticated endpoint and must
+  // never be included in the general settings payload used across the UI.
+  const settings = db.prepare("SELECT * FROM settings WHERE key != 'mcp_access_key'").all();
   const obj = {};
   for (const s of settings) obj[s.key] = s.value;
   res.json(obj);
@@ -272,9 +274,10 @@ function getUTCOffset(tz) {
 router.put('/settings', (req, res) => {
   const upsert = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
   for (const [key, value] of Object.entries(req.body)) {
+    if (key === 'mcp_access_key') continue;
     upsert.run(key, String(value));
   }
-  const settings = db.prepare('SELECT * FROM settings').all();
+  const settings = db.prepare("SELECT * FROM settings WHERE key != 'mcp_access_key'").all();
   const obj = {};
   for (const s of settings) obj[s.key] = s.value;
   res.json(obj);

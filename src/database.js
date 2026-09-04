@@ -130,9 +130,37 @@ db.exec(`
     FOREIGN KEY (operation_id) REFERENCES operation_logs(id) ON DELETE SET NULL
   );
 
+  -- MCP credentials are deliberately separate from web-login JWTs and Git
+  -- tokens. The platform access key is stored in settings; individual MCP
+  -- tokens are one-way hashes so a database leak cannot be used to call MCP.
+  CREATE TABLE IF NOT EXISTS mcp_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    token_prefix TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    expires_at TEXT,
+    revoked_at TEXT,
+    last_used_at TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS mcp_audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mcp_token_id INTEGER,
+    event TEXT NOT NULL,
+    tool_name TEXT DEFAULT '',
+    success INTEGER DEFAULT 1,
+    detail TEXT DEFAULT '',
+    client_address TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (mcp_token_id) REFERENCES mcp_tokens(id) ON DELETE SET NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_operation_logs_project ON operation_logs(project_id, id DESC);
   CREATE INDEX IF NOT EXISTS idx_backup_plans_project ON backup_plans(project_id);
   CREATE INDEX IF NOT EXISTS idx_backup_tasks_plan ON backup_tasks(plan_id, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_mcp_tokens_prefix ON mcp_tokens(token_prefix);
+  CREATE INDEX IF NOT EXISTS idx_mcp_audit_token ON mcp_audit_logs(mcp_token_id, id DESC);
 `);
 
 // Schema migrations: add columns that may not exist on older installations

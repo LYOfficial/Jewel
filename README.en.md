@@ -31,6 +31,7 @@ Jewel is a self-hosted deployment console inspired by Dokploy and Portainer. It 
 ## Table of contents
 
 - [Why Jewel](#why-jewel)
+- [Lightweight design and benchmark data](#lightweight-design-and-benchmark-data)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Quick start](#quick-start)
@@ -53,6 +54,28 @@ Jewel is a self-hosted deployment console inspired by Dokploy and Portainer. It 
 - **AI-friendly errors** — failed clones, deployments, rebuilds, and backups produce redacted, copy-ready diagnostic reports.
 - **Suitable for long-running services** — volume backups, scheduling, consistent pause/resume, crash recovery, and staging retention are built in.
 - **Controlled updates** — updates require manual confirmation, validate a candidate container, and roll back automatically when startup fails.
+
+## Lightweight design and benchmark data
+
+Jewel stays small through deliberate architectural choices: its vanilla Web UI needs no build output or separate frontend service; the server runs as one Node.js process with SQLite for platform metadata; and deployment operations reuse the host Docker API instead of introducing a cluster control plane.
+
+> [!NOTE]
+> This section defines the public benchmark methodology only. It deliberately makes no unverified CPU, memory, or disk-space claim. Reproducible measurements will be added after the Ubuntu host configuration, idle/load samples, and dashboard captures are collected.
+
+### Dashboard measurement scope
+
+The dashboard's **Jewel resources** card measures the Jewel container itself. CPU and memory come from a Docker statistics snapshot. Storage is the sum of the Jewel image, its writable layer, and the `jewel-data` named volume. When `/data` is bind-mounted from the host, its contents are explicitly marked as not included rather than presented as an exact total.
+
+### Benchmark data to be added
+
+| Item | Data to add |
+|---|---|
+| Test date and Jewel version / commit | Pending |
+| Ubuntu and Docker version | Pending |
+| CPU, memory, disk, and virtualization configuration | Pending |
+| Jewel CPU / memory / storage while idle | Pending |
+| Peak use during deployment or automatic update | Pending |
+| Dashboard capture and sampling commands | Pending |
 
 ## Features
 
@@ -318,10 +341,6 @@ Do not include real tokens, passwords, databases, or complete private diagnostic
 
 ## License
 
-Jewel is released under the [MIT License](./LICENSE).
-
-## Acknowledgements
-
-Jewel's product direction is inspired by [Dokploy](https://github.com/Dokploy/dokploy) and [Portainer](https://github.com/portainer/portainer). Backup integrations use or interoperate with `rclone`, `bypy`, and [AnyShare-Unofficial](https://github.com/isHarryh/AnyShare-Unofficial).
+Jewel is released under the [GNU General Public License v3.0](./LICENSE).
 
 <p align="center">Made with ♥ by <a href="https://github.com/LYOfficial">LYOfficial</a></p>

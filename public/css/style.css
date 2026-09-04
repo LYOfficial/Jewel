@@ -337,6 +337,25 @@ textarea { resize: vertical; min-height: 80px; }
 .ring-label { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
 .ring-value { font-size: 13px; color: var(--text-secondary); }
 
+.jewel-resource-card .card-header { margin-bottom: 12px; }
+.card-subtitle { margin-top: 4px; color: var(--text-muted); font-size: 12px; }
+.jewel-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.jewel-resource-item {
+  min-width: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.jewel-resource-item > span { color: var(--text-muted); font-size: 12px; }
+.jewel-resource-item > strong { font-size: 18px; line-height: 1.2; }
+.jewel-resource-item > small { color: var(--text-secondary); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .net-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -730,6 +749,9 @@ textarea { resize: vertical; min-height: 80px; }
   .monitor-grid { grid-template-columns: 1fr; }
   .net-stats { grid-template-columns: repeat(2, 1fr); }
   .dash-row { grid-template-columns: 1fr; }
+  .jewel-resource-grid { gap: 10px; }
+  .jewel-resource-item { padding-left: 9px; }
+  .jewel-resource-item > strong { font-size: 15px; }
 }
 
 /* ====== Main Content ====== */

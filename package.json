@@ -11,7 +11,7 @@
   },
   "keywords": ["docker", "git", "deployment", "ci-cd"],
   "author": "LYOfficial",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.7.0",

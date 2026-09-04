@@ -13,6 +13,21 @@ const Dashboard = {
         <div id="sysInfoContent" class="sys-info-bar"><span class="spinner"></span></div>
       </div>
 
+      <div class="card jewel-resource-card" id="jewelResourceCard">
+        <div class="card-header">
+          <div>
+            <div class="card-title" data-i18n="dashboard.jewelResources">Jewel 平台资源</div>
+            <div class="card-subtitle" data-i18n="dashboard.jewelResourcesHint">Jewel 容器自身的实时资源占用</div>
+          </div>
+          <div class="dashboard-live-status"><span></span><span data-i18n="dashboard.live">实时监控</span></div>
+        </div>
+        <div class="jewel-resource-grid" id="jewelResourceGrid">
+          <div class="jewel-resource-item"><span>CPU</span><strong id="jewelCpuValue">--</strong><small id="jewelCpuDetail">--</small></div>
+          <div class="jewel-resource-item"><span data-i18n="dashboard.memory">内存</span><strong id="jewelMemoryValue">--</strong><small id="jewelMemoryDetail">--</small></div>
+          <div class="jewel-resource-item"><span data-i18n="dashboard.storage">存储</span><strong id="jewelStorageValue">--</strong><small id="jewelStorageDetail">--</small></div>
+        </div>
+      </div>
+
       <!-- Monitor Rings -->
       <div class="monitor-grid" id="monitorGrid">
         <div class="ring-card">
@@ -115,6 +130,67 @@ const Dashboard = {
         <div class="net-item"><span class="net-label">↑ Total</span><span class="net-val">${formatBytes(net.totalTx || 0)}</span></div>
       `;
     } catch { /* ignore */ }
+
+    // This uses a separate, bounded Docker request. Host-level monitoring
+    // above remains responsive even when Docker is busy building or pulling.
+    this.loadJewelResources();
+  },
+
+  jewelResourceLoading: false,
+
+  setJewelMetric(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  },
+
+  async loadJewelResources() {
+    if (this.jewelResourceLoading) return;
+    this.jewelResourceLoading = true;
+    try {
+      const resource = await API.getJewelResources();
+      if (!resource || !resource.available) {
+        const unavailable = I18n.t('dashboard.jewelResourceUnavailable') || 'Docker 中未找到 Jewel 容器';
+        this.setJewelMetric('jewelCpuValue', '--');
+        this.setJewelMetric('jewelMemoryValue', '--');
+        this.setJewelMetric('jewelStorageValue', '--');
+        this.setJewelMetric('jewelCpuDetail', unavailable);
+        this.setJewelMetric('jewelMemoryDetail', unavailable);
+        this.setJewelMetric('jewelStorageDetail', unavailable);
+        return;
+      }
+
+      const statsAvailable = resource.stats_available && resource.running;
+      const stopped = I18n.t('dashboard.jewelStopped') || '容器未运行';
+      this.setJewelMetric('jewelCpuValue', statsAvailable ? `${resource.cpu_percent || 0}%` : '--');
+      this.setJewelMetric('jewelCpuDetail', statsAvailable ? `${resource.container_name || 'jewel'}` : stopped);
+      this.setJewelMetric('jewelMemoryValue', statsAvailable ? formatBytes(resource.memory_bytes || 0) : '--');
+      this.setJewelMetric(
+        'jewelMemoryDetail',
+        statsAvailable && resource.memory_limit_bytes
+          ? (I18n.t('dashboard.jewelMemoryLimit') || '占容器内存上限的 {percent}').replace('{percent}', `${resource.memory_percent || 0}%`)
+          : (statsAvailable ? (I18n.t('dashboard.jewelMemoryLimitUnavailable') || '未设置内存上限') : stopped)
+      );
+
+      const storage = resource.storage || {};
+      const data = storage.data_included
+        ? formatBytes(storage.data_bytes || 0)
+        : (I18n.t('dashboard.jewelDataUnavailable') || '数据卷未纳入');
+      this.setJewelMetric('jewelStorageValue', formatBytes(storage.total_bytes || 0));
+      this.setJewelMetric(
+        'jewelStorageDetail',
+        (I18n.t('dashboard.jewelStorageBreakdown') || '镜像 {image} · 可写层 {writable} · 数据卷 {data}')
+          .replace('{image}', formatBytes(storage.image_bytes || 0))
+          .replace('{writable}', formatBytes(storage.writable_layer_bytes || 0))
+          .replace('{data}', data)
+      );
+    } catch {
+      const unavailable = I18n.t('dashboard.jewelResourceUnavailable') || 'Jewel 资源暂不可用';
+      this.setJewelMetric('jewelCpuDetail', unavailable);
+      this.setJewelMetric('jewelMemoryDetail', unavailable);
+      this.setJewelMetric('jewelStorageDetail', unavailable);
+    } finally {
+      this.jewelResourceLoading = false;
+    }
   },
 
   drawRing(canvasId, percent, color) {

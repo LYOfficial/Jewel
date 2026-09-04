@@ -49,6 +49,17 @@ router.get('/monitor', (req, res) => {
   });
 });
 
+// Keep Jewel's own Docker metrics separate from the fast host monitor. The
+// dashboard loads this endpoint asynchronously, so a slow Docker daemon never
+// delays page navigation or host CPU/memory/network rendering.
+router.get('/jewel-resources', async (req, res) => {
+  try {
+    res.json(await dockerService.getJewelResourceUsage());
+  } catch {
+    res.json({ available: false, reason: 'docker-unavailable' });
+  }
+});
+
 let prevCpuTimes = null;
 
 function getCpuPercent() {

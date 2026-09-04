@@ -6,6 +6,8 @@ const { exec, execSync } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 const gitService = require('./git-service');
+const { cpuPercent, memoryUsage } = require('./project-resource-utils');
+const { findJewelContainer, summarizeJewelStorage } = require('./jewel-resource-utils');
 
 let docker = null;
 let dockerAvailable = null;
@@ -561,6 +563,52 @@ async function getDockerInfo() {
   return info;
 }
 
+// Return the resource footprint of Jewel itself, not the host-wide Docker
+// workload. The named `/data` volume is included when Docker can report its
+// size; bind-mounted data is deliberately marked unavailable rather than
+// walking an arbitrary host path during every dashboard refresh.
+async function getJewelResourceUsage() {
+  const d = getDocker();
+  const configuredName = process.env.JEWEL_CONTAINER || 'jewel';
+  const containers = await d.listContainers({ all: true, size: true });
+  const summary = findJewelContainer(containers, configuredName);
+
+  if (!summary) {
+    return { available: false, reason: 'not-found' };
+  }
+
+  const container = d.getContainer(summary.Id);
+  const diskUsagePromise = typeof d.df === 'function' ? d.df() : Promise.resolve({});
+  const statsPromise = summary.State === 'running'
+    ? getContainerStats(summary.Id)
+    : Promise.resolve(null);
+  const [inspectResult, diskUsageResult, statsResult] = await Promise.allSettled([
+    container.inspect(),
+    diskUsagePromise,
+    statsPromise
+  ]);
+
+  const info = inspectResult.status === 'fulfilled'
+    ? inspectResult.value
+    : { Image: summary.ImageID || '', Mounts: [] };
+  const diskUsage = diskUsageResult.status === 'fulfilled' ? diskUsageResult.value : {};
+  const stats = statsResult.status === 'fulfilled' ? statsResult.value : null;
+  const memory = stats ? memoryUsage(stats) : { usage: 0, limit: 0 };
+
+  return {
+    available: true,
+    running: summary.State === 'running',
+    stats_available: Boolean(stats),
+    container_id: summary.Id,
+    container_name: ((summary.Names || [])[0] || configuredName).replace(/^\//, ''),
+    cpu_percent: stats ? Math.round(cpuPercent(stats) * 10) / 10 : 0,
+    memory_bytes: memory.usage,
+    memory_limit_bytes: memory.limit,
+    memory_percent: memory.limit > 0 ? Math.round((memory.usage / memory.limit) * 1000) / 10 : 0,
+    storage: summarizeJewelStorage(summary, info, diskUsage)
+  };
+}
+
 // ===== Images =====
 
 async function listImages(all = true) {
@@ -776,6 +824,7 @@ module.exports = {
   getProjectContainers,
   captureComposeProjectLogs,
   getDockerInfo,
+  getJewelResourceUsage,
   ensureEnvFiles,
   findContainerByName,
   readDeployLog,

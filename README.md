@@ -31,6 +31,7 @@ Jewel 是一个受 Dokploy 与 Portainer 启发的自托管部署控制台。它
 ## 目录
 
 - [为什么选择 Jewel](#为什么选择-jewel)
+- [轻量化体现与实测数据](#轻量化体现与实测数据)
 - [核心能力](#核心能力)
 - [系统架构](#系统架构)
 - [快速开始](#快速开始)
@@ -53,6 +54,28 @@ Jewel 是一个受 Dokploy 与 Portainer 启发的自托管部署控制台。它
 - **错误适合交给 AI 分析**：克隆、部署、重构和备份失败会生成脱敏、可一键复制的诊断报告。
 - **兼顾长期运行**：支持挂载卷备份、自动调度、暂停恢复、崩溃恢复和本地缓存保留策略。
 - **标准化自更新**：手动确认后构建候选镜像；就绪检查失败时自动回滚旧容器。
+
+## 轻量化体现与实测数据
+
+Jewel 的轻量化首先来自架构取舍：原生 Web 前端不需要构建产物或常驻前端服务；服务端以单个 Node.js 进程运行，并使用 SQLite 保存平台元数据；部署与运维直接复用宿主机 Docker API，而非额外引入集群控制面。
+
+> [!NOTE]
+> 本节先定义公开测试的口径，不把“轻量化”表述为未经验证的具体数值。收到实际 Ubuntu 主机配置、空闲/负载采样和仪表盘截图后，将在此补充可复现的实测结果。
+
+### 仪表盘口径
+
+仪表盘中的 **Jewel 平台资源** 只统计 Jewel 容器自身：CPU 与内存来自 Docker 的单次统计快照；存储为 Jewel 镜像、容器可写层与 `jewel-data` 命名卷之和。若 `/data` 使用宿主机目录挂载，目录内容不会在该合计中冒充精确数据，而会明确标记为未纳入。
+
+### 待补充的测试数据
+
+| 项目 | 待补充内容 |
+|---|---|
+| 测试日期与 Jewel 版本 / Commit | 待补充 |
+| Ubuntu 与 Docker 版本 | 待补充 |
+| CPU、内存、磁盘与虚拟化配置 | 待补充 |
+| 空闲状态 Jewel CPU / 内存 / 存储 | 待补充 |
+| 项目部署或自动更新期间的峰值 | 待补充 |
+| 仪表盘截图与采样命令 | 待补充 |
 
 ## 核心能力
 
@@ -320,10 +343,6 @@ Jewel/
 
 ## 许可证
 
-Jewel 使用 [MIT License](./LICENSE) 开源。
-
-## 致谢
-
-Jewel 的产品方向受到 [Dokploy](https://github.com/Dokploy/dokploy) 和 [Portainer](https://github.com/portainer/portainer) 启发。备份能力使用或兼容 `rclone`、`bypy` 与 [AnyShare-Unofficial](https://github.com/isHarryh/AnyShare-Unofficial)。
+Jewel 使用 [GNU General Public License v3.0](./LICENSE) 开源。
 
 <p align="center">Made with ♥ by <a href="https://github.com/LYOfficial">LYOfficial</a></p>

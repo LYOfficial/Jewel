@@ -10,6 +10,20 @@
 
 Jewel 是一個輕量級的 Git 到 Docker 整合部署平台，靈感來源於 Dokploy 和 Portainer。它可以幫助你快速將 Git 倉庫中的專案透過 Docker Compose 進行構建和部署。
 
+## 輕量化設計與待補實測資料
+
+Jewel 使用原生 Web 前端、單一 Node.js 行程與 SQLite，並直接使用宿主機 Docker API，不額外引入前端建置服務或叢集控制平面。
+
+> 本節只預留可重現的測試口徑；收到 Ubuntu 主機規格、閒置／負載採樣及儀表板記錄後，再補上實測數據。
+
+| 項目 | 待補內容 |
+|---|---|
+| 測試日期與 Jewel 版本 / Commit | 待補 |
+| Ubuntu 與 Docker 版本 | 待補 |
+| CPU、記憶體、磁碟與虛擬化設定 | 待補 |
+| 閒置時 Jewel CPU / 記憶體 / 儲存 | 待補 |
+| 部署或自動更新時峰值 | 待補 |
+
 ### 核心功能
 
 - **Git 倉庫整合** — 支援 GitHub / GitLab Token 登入，一鍵選擇倉庫
@@ -139,7 +153,7 @@ Jewel 會定期檢查 GitHub 倉庫是否有新的提交。當偵測到新版本
 
 ## 授權條款
 
-MIT License
+[GNU General Public License v3.0](./LICENSE)
 
 ---
 

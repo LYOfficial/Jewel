@@ -206,6 +206,7 @@ const API = {
   // System
   getSystemInfo() { return this.get('/system/info'); },
   getMonitor() { return this.get('/system/monitor'); },
+  getJewelResources() { return this.request('GET', '/system/jewel-resources', null, { timeoutMs: 4000 }); },
   checkUpdate() { return this.get('/system/update/check'); },
   forceCheckUpdate() { return this.post('/system/update/check', null, { timeoutMs: 7000 }); },
   applyUpdate() { return this.post('/system/update/apply'); },

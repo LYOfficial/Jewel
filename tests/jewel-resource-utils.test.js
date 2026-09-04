@@ -1,0 +1,46 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const { findJewelContainer, summarizeJewelStorage } = require('../src/jewel-resource-utils');
+
+test('finds the active named Jewel container ahead of a labelled rollback container', () => {
+  const container = findJewelContainer([
+    { Id: 'old', Names: ['/jewel-rollback'], Labels: { 'io.jewel.managed': 'true' } },
+    { Id: 'current', Names: ['/jewel'], Labels: { 'io.jewel.managed': 'true' } }
+  ]);
+
+  assert.equal(container.Id, 'current');
+});
+
+test('summarizes Jewel image, writable layer, and named data volume without double counting', () => {
+  const storage = summarizeJewelStorage(
+    { ImageID: 'sha256:image', SizeRw: 15, SizeRootFs: 115 },
+    { Image: 'sha256:image', Mounts: [{ Type: 'volume', Name: 'jewel-data', Destination: '/data' }] },
+    {
+      Images: [{ Id: 'image', Size: 100 }],
+      Volumes: [{ Name: 'jewel-data', UsageData: { Size: 250 } }]
+    }
+  );
+
+  assert.deepEqual(storage, {
+    total_bytes: 365,
+    image_bytes: 100,
+    writable_layer_bytes: 15,
+    data_bytes: 250,
+    data_included: true,
+    data_mount_type: 'volume'
+  });
+});
+
+test('does not claim an arbitrary bind-mounted data directory is measured', () => {
+  const storage = summarizeJewelStorage(
+    { SizeRw: 5, SizeRootFs: 45 },
+    { Mounts: [{ Type: 'bind', Source: '/srv/jewel-data', Destination: '/data' }] },
+    {}
+  );
+
+  assert.equal(storage.image_bytes, 40);
+  assert.equal(storage.data_bytes, null);
+  assert.equal(storage.data_included, false);
+  assert.equal(storage.total_bytes, 45);
+});

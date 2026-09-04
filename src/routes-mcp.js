@@ -35,17 +35,38 @@ router.options('/', (req, res) => {
   res.status(204).end();
 });
 
-router.get('/', (req, res) => {
-  res.set('Allow', 'POST, OPTIONS');
-  res.status(405).json({ error: 'Jewel MCP uses Streamable HTTP POST requests.' });
-});
-
-router.post('/', async (req, res) => {
+function authenticateRequest(req, res) {
   const auth = mcpAuth.authenticate(req);
   if (!auth.ok) {
     res.set('WWW-Authenticate', 'Bearer realm="Jewel MCP"');
-    return res.status(401).json({ error: auth.error });
+    res.status(401).json({ error: auth.error });
+    return null;
   }
+  return auth;
+}
+
+// Some Streamable HTTP clients probe the MCP endpoint with a GET before
+// issuing initialize. Keep an authenticated SSE stream open so those clients
+// can discover the endpoint instead of treating a 405 as a failed connector.
+router.get('/', (req, res) => {
+  if (!authenticateRequest(req, res)) return;
+  res.status(200);
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  res.flushHeaders();
+  res.write(': Jewel MCP stream ready\n\n');
+  const heartbeat = setInterval(() => res.write(': keepalive\n\n'), 25000);
+  if (heartbeat.unref) heartbeat.unref();
+  req.on('close', () => clearInterval(heartbeat));
+});
+
+router.post('/', async (req, res) => {
+  const auth = authenticateRequest(req, res);
+  if (!auth) return;
 
   const message = req.body;
   if (!message || Array.isArray(message) || message.jsonrpc !== '2.0' || typeof message.method !== 'string') {

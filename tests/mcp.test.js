@@ -44,6 +44,11 @@ test('MCP authenticates an access-key/token pair and serves Streamable HTTP tool
     const denied = await request({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
     assert.equal(denied.status, 401);
 
+    const stream = await fetch(endpoint, { headers: credentials });
+    assert.equal(stream.status, 200);
+    assert.match(stream.headers.get('content-type'), /^text\/event-stream/);
+    await stream.body.cancel();
+
     const initialized = await request({
       jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: '2025-03-26' }
     }, credentials);

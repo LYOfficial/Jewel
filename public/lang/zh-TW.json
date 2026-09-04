@@ -31,6 +31,7 @@
   "dashboard.stoppedContainers": "已停止容器",
   "dashboard.system": "系統",
   "dashboard.systemInfo": "系統資訊",
+  "dashboard.hostResources": "主機資源",
   "dashboard.jewelResources": "Jewel 平台資源",
   "dashboard.jewelResourcesHint": "Jewel 容器本身的即時資源使用量",
   "dashboard.jewelResourceUnavailable": "Jewel 資源暫時無法取得",

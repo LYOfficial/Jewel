@@ -31,6 +31,7 @@
   "dashboard.stoppedContainers": "Stopped Containers",
   "dashboard.system": "System",
   "dashboard.systemInfo": "System Info",
+  "dashboard.hostResources": "Host resources",
   "dashboard.jewelResources": "Jewel resources",
   "dashboard.jewelResourcesHint": "Live resource usage of the Jewel container itself",
   "dashboard.jewelResourceUnavailable": "Jewel resources are unavailable",

@@ -56,6 +56,11 @@ test('dashboard uses the short comparable host CPU sample returned with Jewel st
 test('Jewel platform metrics use a compact inline dashboard layout', () => {
   const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'css', 'style.css'), 'utf8');
   assert.match(dashboard, /class="jewel-resource-inline"/);
-  assert.match(css, /\.jewel-resource-inline \{ display: flex; align-items: center;/);
+  assert.match(dashboard, /class="host-resource-inline"/);
+  assert.match(css, /\.jewel-resource-inline,[\s\S]*?\.host-resource-inline \{ display: flex; align-items: center;/);
   assert.match(css, /\.jewel-resource-item > small \{ display: none; \}/);
+});
+
+test('dashboard labels binary byte values with IEC units', () => {
+  assert.match(dashboard, /\['B', 'KiB', 'MiB', 'GiB', 'TiB'\]/);
 });

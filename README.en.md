@@ -28,24 +28,6 @@ Jewel is a self-hosted deployment console inspired by Dokploy and Portainer. It 
 > [!IMPORTANT]
 > Jewel focuses on a single Docker host. It does not manage DNS, reverse proxies, TLS certificates, or multi-node orchestration. Pair it with Caddy, Traefik, Nginx Proxy Manager, or another edge service when those capabilities are required.
 
-## Table of contents
-
-- [Why Jewel](#why-jewel)
-- [Lightweight design and benchmark data](#lightweight-design-and-benchmark-data)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Quick start](#quick-start)
-- [First login](#first-login)
-- [Backup center](#backup-center)
-- [Built-in self-update](#built-in-self-update)
-- [Configuration](#configuration)
-- [Local development](#local-development)
-- [Repository layout](#repository-layout)
-- [Security](#security)
-- [FAQ](#faq)
-- [Contributing](#contributing)
-- [License](#license)
-
 ## Why Jewel
 
 - **Lightweight by design** — vanilla HTML, CSS, and JavaScript with no frontend build pipeline; one Node.js process and SQLite.
@@ -55,27 +37,19 @@ Jewel is a self-hosted deployment console inspired by Dokploy and Portainer. It 
 - **Suitable for long-running services** — volume backups, scheduling, consistent pause/resume, crash recovery, and staging retention are built in.
 - **Controlled updates** — updates require manual confirmation, validate a candidate container, and roll back automatically when startup fails.
 
-## Lightweight design and benchmark data
+## Measured lightweight footprint
 
-Jewel stays small through deliberate architectural choices: its vanilla Web UI needs no build output or separate frontend service; the server runs as one Node.js process with SQLite for platform metadata; and deployment operations reuse the host Docker API instead of introducing a cluster control plane.
+On a **Debian 13.6 / KVM** VM (16 vCPU AMD EPYC 7302P, 15 GiB RAM, 100 GB ext4 system disk, Docker Engine 29.5.2), the stable-state dashboard sample was:
 
-> [!NOTE]
-> This section defines the public benchmark methodology only. It deliberately makes no unverified CPU, memory, or disk-space claim. Reproducible measurements will be added after the Ubuntu host configuration, idle/load samples, and dashboard captures are collected.
+| Metric | Jewel | Host at the same time |
+|---|---:|---:|
+| CPU | **0.4%** | 4.8% |
+| Memory | **28.5 MiB** | 3.2 GiB / 15.6 GiB |
+| Storage | **843.3 MiB** | 21.6 GiB / 98.2 GiB |
 
-### Dashboard measurement scope
+Jewel therefore used about **0.18%** of host RAM while idle. Its reported storage was 501.1 MiB of image, 342.2 MiB of persistent data, and a 0 B writable layer; the data volume stores SQLite state, cloned projects, and backup staging rather than runtime process overhead. The image intentionally includes Git, Docker CLI, Compose, and backup tools, so this is the footprint of an immediately usable operations platform.
 
-The dashboard's **Jewel resources** card measures the Jewel container itself. CPU and memory come from a Docker statistics snapshot. Storage is the sum of the Jewel image, its writable layer, and the `jewel-data` named volume. When `/data` is bind-mounted from the host, its contents are explicitly marked as not included rather than presented as an exact total.
-
-### Benchmark data to be added
-
-| Item | Data to add |
-|---|---|
-| Test date and Jewel version / commit | Pending |
-| Ubuntu and Docker version | Pending |
-| CPU, memory, disk, and virtualization configuration | Pending |
-| Jewel CPU / memory / storage while idle | Pending |
-| Peak use during deployment or automatic update | Pending |
-| Dashboard capture and sampling commands | Pending |
+The dashboard measures the Jewel container itself. CPU and memory come from Docker statistics; storage is image + writable layer + `jewel-data`. It uses binary MiB/GiB units; Docker CLI's decimal MB/GB renders those same image and volume bytes as about 525 MB and 358.8 MB. The `sudo docker stats --no-stream jewel` verification at the same period reported 0.43% CPU and 29.94 MiB memory. Image and data-volume size change with self-updates, projects, and backups, so the live dashboard remains authoritative.
 
 ## Features
 

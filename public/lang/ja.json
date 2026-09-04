@@ -31,6 +31,7 @@
   "dashboard.stoppedContainers": "停止中コンテナ",
   "dashboard.system": "システム",
   "dashboard.systemInfo": "システム情報",
+  "dashboard.hostResources": "ホストリソース",
   "dashboard.jewelResources": "Jewel リソース",
   "dashboard.jewelResourcesHint": "Jewel コンテナ自身のリアルタイムリソース使用量",
   "dashboard.jewelResourceUnavailable": "Jewel リソースを取得できません",

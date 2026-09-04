@@ -53,16 +53,33 @@ router.get('/monitor', (req, res) => {
 // dashboard loads this endpoint asynchronously, so a slow Docker daemon never
 // delays page navigation or host CPU/memory/network rendering.
 router.get('/jewel-resources', async (req, res) => {
+  // Docker reports container CPU over a short daemon-managed interval. Sample
+  // host CPU over the same short interval here, rather than reusing the
+  // dashboard monitor's older five-second average. That makes the two values
+  // comparable on one screen.
+  const before = readCpuTimes();
+  await wait(750);
+  const hostCpuPercent = cpuPercentBetween(before, readCpuTimes());
   try {
-    res.json(await dockerService.getJewelResourceUsage());
+    const resource = await dockerService.getJewelResourceUsage();
+    // A container is part of the host total. Docker and /proc are read a few
+    // milliseconds apart, so preserve that invariant at the presentation
+    // boundary instead of ever rendering an impossible total below Jewel.
+    const comparableHostCpuPercent = resource.stats_available
+      ? Math.max(hostCpuPercent, Number(resource.cpu_percent) || 0)
+      : hostCpuPercent;
+    res.json({
+      ...resource,
+      host_cpu_percent: Math.round(comparableHostCpuPercent * 10) / 10
+    });
   } catch {
-    res.json({ available: false, reason: 'docker-unavailable' });
+    res.json({ available: false, reason: 'docker-unavailable', host_cpu_percent: hostCpuPercent });
   }
 });
 
 let prevCpuTimes = null;
 
-function getCpuPercent() {
+function readCpuTimes() {
   const cpus = os.cpus();
   let totalIdle = 0, totalTick = 0;
   for (const cpu of cpus) {
@@ -71,19 +88,33 @@ function getCpuPercent() {
     }
     totalIdle += cpu.times.idle;
   }
+  return { idle: totalIdle, tick: totalTick };
+}
+
+function cpuPercentBetween(previous, current) {
+  if (!previous || !current) return 0;
+  const idleDiff = current.idle - previous.idle;
+  const tickDiff = current.tick - previous.tick;
+  if (tickDiff <= 0) return 0;
+  const used = tickDiff - idleDiff;
+  return Math.round((used / tickDiff) * 1000) / 10;
+}
+
+function getCpuPercent() {
+  const current = readCpuTimes();
 
   if (!prevCpuTimes) {
-    prevCpuTimes = { idle: totalIdle, tick: totalTick };
+    prevCpuTimes = current;
     return 0;
   }
 
-  const idleDiff = totalIdle - prevCpuTimes.idle;
-  const tickDiff = totalTick - prevCpuTimes.tick;
-  prevCpuTimes = { idle: totalIdle, tick: totalTick };
+  const result = cpuPercentBetween(prevCpuTimes, current);
+  prevCpuTimes = current;
+  return result;
+}
 
-  if (tickDiff === 0) return 0;
-  const used = tickDiff - idleDiff;
-  return Math.round((used / tickDiff) * 1000) / 10;
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function getDiskInfo() {

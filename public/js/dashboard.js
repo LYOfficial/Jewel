@@ -1,5 +1,6 @@
 const Dashboard = {
   monitorTimer: null,
+  latestHostCpuPercent: null,
 
   async render(container) {
     container.innerHTML = `
@@ -14,14 +15,11 @@ const Dashboard = {
       </div>
 
       <div class="card jewel-resource-card" id="jewelResourceCard">
-        <div class="card-header">
-          <div>
+        <div class="jewel-resource-inline">
+          <div class="jewel-resource-heading">
             <div class="card-title" data-i18n="dashboard.jewelResources">Jewel 平台资源</div>
-            <div class="card-subtitle" data-i18n="dashboard.jewelResourcesHint">Jewel 容器自身的实时资源占用</div>
+            <div class="jewel-resource-hint" data-i18n="dashboard.jewelResourcesHint">Jewel 容器自身的实时资源占用</div>
           </div>
-          <div class="dashboard-live-status"><span></span><span data-i18n="dashboard.live">实时监控</span></div>
-        </div>
-        <div class="jewel-resource-grid" id="jewelResourceGrid">
           <div class="jewel-resource-item"><span>CPU</span><strong id="jewelCpuValue">--</strong><small id="jewelCpuDetail">--</small></div>
           <div class="jewel-resource-item"><span data-i18n="dashboard.memory">内存</span><strong id="jewelMemoryValue">--</strong><small id="jewelMemoryDetail">--</small></div>
           <div class="jewel-resource-item"><span data-i18n="dashboard.storage">存储</span><strong id="jewelStorageValue">--</strong><small id="jewelStorageDetail">--</small></div>
@@ -111,8 +109,7 @@ const Dashboard = {
       `;
 
       // Rings
-      this.drawRing('cpuRing', m.cpuPercent, this.themeColor('--ring-accent'));
-      document.getElementById('cpuValue').textContent = m.cpuPercent + '%';
+      this.latestHostCpuPercent = m.cpuPercent;
 
       this.drawRing('memRing', m.memPercent, this.themeColor('--ring-accent'));
       document.getElementById('memValue').textContent = formatBytes(m.memUsed) + ' / ' + formatBytes(m.memTotal);
@@ -140,7 +137,17 @@ const Dashboard = {
 
   setJewelMetric(id, value) {
     const el = document.getElementById(id);
-    if (el) el.textContent = value;
+    if (!el) return;
+    el.textContent = value;
+    const item = el.closest('.jewel-resource-item');
+    if (item) item.title = value;
+  },
+
+  setHostCpu(percent) {
+    const normalized = Math.max(0, Math.round((Number(percent) || 0) * 10) / 10);
+    this.drawRing('cpuRing', normalized, this.themeColor('--ring-accent'));
+    const value = document.getElementById('cpuValue');
+    if (value) value.textContent = normalized + '%';
   },
 
   async loadJewelResources() {
@@ -148,6 +155,11 @@ const Dashboard = {
     this.jewelResourceLoading = true;
     try {
       const resource = await API.getJewelResources();
+      if (resource && typeof resource.host_cpu_percent === 'number') {
+        this.setHostCpu(resource.host_cpu_percent);
+      } else if (this.latestHostCpuPercent !== null) {
+        this.setHostCpu(this.latestHostCpuPercent);
+      }
       if (!resource || !resource.available) {
         const unavailable = I18n.t('dashboard.jewelResourceUnavailable') || 'Docker 中未找到 Jewel 容器';
         this.setJewelMetric('jewelCpuValue', '--');
@@ -185,6 +197,7 @@ const Dashboard = {
       );
     } catch {
       const unavailable = I18n.t('dashboard.jewelResourceUnavailable') || 'Jewel 资源暂不可用';
+      if (this.latestHostCpuPercent !== null) this.setHostCpu(this.latestHostCpuPercent);
       this.setJewelMetric('jewelCpuDetail', unavailable);
       this.setJewelMetric('jewelMemoryDetail', unavailable);
       this.setJewelMetric('jewelStorageDetail', unavailable);

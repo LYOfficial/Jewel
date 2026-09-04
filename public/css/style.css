@@ -337,24 +337,25 @@ textarea { resize: vertical; min-height: 80px; }
 .ring-label { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
 .ring-value { font-size: 13px; color: var(--text-secondary); }
 
-.jewel-resource-card .card-header { margin-bottom: 12px; }
-.card-subtitle { margin-top: 4px; color: var(--text-muted); font-size: 12px; }
-.jewel-resource-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
+.card.jewel-resource-card { padding-top: 12px; padding-bottom: 12px; }
+.jewel-resource-inline { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.jewel-resource-heading { flex: 0 0 auto; min-width: 0; }
+.jewel-resource-heading .card-title { white-space: nowrap; }
+.jewel-resource-hint { display: none; }
 .jewel-resource-item {
-  min-width: 0;
-  padding-left: 12px;
+  flex: 1 1 0;
+  min-width: 68px;
+  padding-left: 10px;
   border-left: 2px solid var(--line);
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .jewel-resource-item > span { color: var(--text-muted); font-size: 12px; }
-.jewel-resource-item > strong { font-size: 18px; line-height: 1.2; }
-.jewel-resource-item > small { color: var(--text-secondary); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jewel-resource-item > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 15px; line-height: 1.2; }
+.jewel-resource-item > small { display: none; }
 
 .net-stats {
   display: grid;
@@ -749,8 +750,9 @@ textarea { resize: vertical; min-height: 80px; }
   .monitor-grid { grid-template-columns: 1fr; }
   .net-stats { grid-template-columns: repeat(2, 1fr); }
   .dash-row { grid-template-columns: 1fr; }
-  .jewel-resource-grid { gap: 10px; }
-  .jewel-resource-item { padding-left: 9px; }
+  .jewel-resource-inline { flex-wrap: wrap; gap: 10px; }
+  .jewel-resource-heading { flex-basis: 100%; }
+  .jewel-resource-item { padding-left: 8px; }
   .jewel-resource-item > strong { font-size: 15px; }
 }
 

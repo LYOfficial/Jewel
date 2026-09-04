@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { findJewelContainer, summarizeJewelStorage } = require('../src/jewel-resource-utils');
+const systemRoutes = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'routes-system.js'), 'utf8');
+const dashboard = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'js', 'dashboard.js'), 'utf8');
 
 test('finds the active named Jewel container ahead of a labelled rollback container', () => {
   const container = findJewelContainer([
@@ -43,4 +45,17 @@ test('does not claim an arbitrary bind-mounted data directory is measured', () =
   assert.equal(storage.data_bytes, null);
   assert.equal(storage.data_included, false);
   assert.equal(storage.total_bytes, 45);
+});
+
+test('dashboard uses the short comparable host CPU sample returned with Jewel stats', () => {
+  assert.match(systemRoutes, /const before = readCpuTimes\(\);[\s\S]*?await wait\(750\);[\s\S]*?host_cpu_percent/);
+  assert.match(systemRoutes, /Math\.max\(hostCpuPercent, Number\(resource\.cpu_percent\) \|\| 0\)/);
+  assert.match(dashboard, /this\.setHostCpu\(resource\.host_cpu_percent\)/);
+});
+
+test('Jewel platform metrics use a compact inline dashboard layout', () => {
+  const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'css', 'style.css'), 'utf8');
+  assert.match(dashboard, /class="jewel-resource-inline"/);
+  assert.match(css, /\.jewel-resource-inline \{ display: flex; align-items: center;/);
+  assert.match(css, /\.jewel-resource-item > small \{ display: none; \}/);
 });

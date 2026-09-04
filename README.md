@@ -254,16 +254,19 @@ setx JEWEL_MCP_TOKEN "jwl_mcp_创建时复制的完整Token"
 |---|---|
 | 名称 | `Jewel`（可自定义） |
 | 类型 | `流式 HTTP` / `Streamable HTTP` |
-| MCP 地址 / Server URL | `https://你的域名/mcp`，例如 `https://jewel.example.com/mcp` |
+| MCP 地址 / Server URL | `https://你的域名/mcp-server`，例如 `https://jewel.example.com/mcp-server` |
 | Bearer 令牌环境变量 | `JEWEL_MCP_TOKEN` |
 | Header 1 名称 | `X-Jewel-Access-Key` |
 | Header 1 值 | MCP 页面中复制的平台 Access Key |
 
 不要手动添加 `Authorization` 标头：该客户端会从 “Bearer 令牌环境变量” 中读取 Token 并自动发送它。下方“来自环境变量的标头”也不需要填写。
 
-如果 Jewel 直接以默认端口对可信内网提供服务，地址可以是 `http://服务器地址:330/mcp`；公网部署必须经由 HTTPS 反向代理，并在代理中原样转发 `Authorization` 与 `X-Jewel-Access-Key` 两个请求头。**不要**把 Access Key 或 Token 拼接到 URL 查询参数中，也不要将其发到聊天、Issue 或日志里。
+如果 Jewel 直接以默认端口对可信内网提供服务，地址可以是 `http://服务器地址:330/mcp-server`；公网部署必须经由 HTTPS 反向代理，并在代理中原样转发 `Authorization` 与 `X-Jewel-Access-Key` 两个请求头。**不要**把 Access Key 或 Token 拼接到 URL 查询参数中，也不要将其发到聊天、Issue 或日志里。
 
-保存后请新建一个对话，再让客户端执行“列出 Jewel 项目”或“检查 Jewel 更新”验证连接。连接器工具会在对话开始时加载，已经打开的旧对话不会自动获得新工具。若客户端提示 401，请检查地址末尾是否为 `/mcp`、已完全重启客户端，以及 `JEWEL_MCP_TOKEN` 是否仍有效。不要用浏览器页面判断连接是否成功：MCP 使用认证后的 JSON-RPC POST 与 SSE 流，浏览器不能显示可读的测试结果。
+保存后请新建一个对话，再让客户端执行“列出 Jewel 项目”或“检查 Jewel 更新”验证连接。连接器工具会在对话开始时加载，已经打开的旧对话不会自动获得新工具。若客户端提示 401，请检查地址末尾是否为 `/mcp-server`、已完全重启客户端，以及 `JEWEL_MCP_TOKEN` 是否仍有效。不要用浏览器页面判断连接是否成功：MCP 使用认证后的 JSON-RPC POST 与 SSE 流，浏览器不能显示可读的测试结果。
+
+> [!NOTE]
+> Jewel 的 **MCP 管理页面** 是 `https://你的域名/mcp`，而客户端需要填写的 **MCP 协议地址** 是 `https://你的域名/mcp-server`。两者不能互换；从旧版本升级后请将已保存的客户端地址更新为 `/mcp-server`。
 
 ### MCP 工具清单
 

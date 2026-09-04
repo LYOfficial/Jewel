@@ -42,11 +42,14 @@ app.use('/api/system', routesSystem);
 app.use('/api/tokens', routesTokens);
 app.use('/api/backups', routesBackups);
 app.use('/api/mcp', routesMcpManagement);
-app.use('/mcp', routesMcp);
+// Keep the browser-facing MCP management page at /mcp. The protocol itself
+// lives at a distinct endpoint so a page navigation can never be mistaken for
+// a long-lived Streamable HTTP/SSE connection.
+app.use('/mcp-server', routesMcp);
 
 // Fallback error handler — ensure API errors return JSON, not HTML
 app.use((err, req, res, next) => {
-  if (req.path.startsWith('/api/') || req.path.startsWith('/mcp')) {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/mcp-server')) {
     return res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
   }
   next(err);

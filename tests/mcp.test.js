@@ -17,7 +17,7 @@ test('MCP authenticates an access-key/token pair and serves Streamable HTTP tool
   const routesMcp = require('../src/routes-mcp');
   const app = express();
   app.use(express.json());
-  app.use('/mcp', routesMcp);
+  app.use('/mcp-server', routesMcp);
   const server = http.createServer(app);
 
   try {
@@ -30,7 +30,7 @@ test('MCP authenticates an access-key/token pair and serves Streamable HTTP tool
 
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const { port } = server.address();
-    const endpoint = `http://127.0.0.1:${port}/mcp`;
+    const endpoint = `http://127.0.0.1:${port}/mcp-server`;
     const request = async (body, headers = {}) => fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },

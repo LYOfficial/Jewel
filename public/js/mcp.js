@@ -55,7 +55,7 @@ const Mcp = {
         </section>
       </div>`;
     I18n.apply();
-    document.getElementById('mcpEndpoint').value = `${window.location.origin}/mcp`;
+    document.getElementById('mcpEndpoint').value = `${window.location.origin}/mcp-server`;
     document.getElementById('copyMcpEndpoint').addEventListener('click', () => App.copyText(
       document.getElementById('mcpEndpoint').value,
       I18n.t('mcp.copied') || 'Copied'

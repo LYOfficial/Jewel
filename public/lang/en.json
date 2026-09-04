@@ -492,6 +492,7 @@
   "mcp.status": "Status",
   "mcp.active": "Active",
   "mcp.expired": "Expired",
+  "mcp.failed": "Failed",
   "mcp.revoke": "Revoke",
   "mcp.confirmRevoke": "Revoke this MCP token? This cannot be undone.",
   "mcp.revoked": "Revoked",

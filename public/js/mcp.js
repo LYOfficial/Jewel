@@ -140,7 +140,7 @@ const Mcp = {
           <td>${App.escapeHtml(row.token_name || row.token_prefix || '-')}</td>
           <td>${App.escapeHtml(row.event)}</td><td>${App.escapeHtml(row.tool_name || '-')}</td>
           <td>${App.escapeHtml(row.detail || '-')}</td>
-          <td>${row.success ? this.statusLabel('active') : this.statusLabel('revoked')}</td>
+          <td>${row.success ? this.statusLabel('active') : this.statusLabel('failed')}</td>
           <td>${App.escapeHtml(row.client_address || '-')}</td>
         </tr>`).join('')}</tbody></table>`;
       I18n.apply();
@@ -194,7 +194,13 @@ const Mcp = {
   },
 
   statusLabel(status) {
-    const key = status === 'active' ? 'mcp.active' : status === 'expired' ? 'mcp.expired' : 'mcp.revoked';
+    const key = status === 'active'
+      ? 'mcp.active'
+      : status === 'expired'
+        ? 'mcp.expired'
+        : status === 'failed'
+          ? 'mcp.failed'
+          : 'mcp.revoked';
     return App.escapeHtml(I18n.t(key));
   }
 };

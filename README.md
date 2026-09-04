@@ -242,19 +242,28 @@ MCP **不会**提供项目/容器/镜像/卷删除、任意容器命令执行、
 
 在“连接至自定义 MCP”的页面中按以下方式配置。截图中当前选中的是 **STDIO**；请切换为右侧的 **流式 HTTP**，因为 Jewel 是远程 HTTP MCP 服务，不需要填写启动命令、参数、环境变量传递或工作目录。
 
+该客户端的“Bearer 令牌环境变量”要求填写的是**本机环境变量名称**，不是 Token 明文；而它会自行生成 `Authorization: Bearer …` 请求头。请先在运行 ChatGPT / Codex Desktop 的电脑上创建用户环境变量（Windows 示例）：
+
+```powershell
+setx JEWEL_MCP_TOKEN "jwl_mcp_创建时复制的完整Token"
+```
+
+执行后请完全退出并重新打开客户端，再填写 `JEWEL_MCP_TOKEN`。也可以通过 Windows“编辑账户的环境变量”创建同名变量。
+
 | 字段 | 填写内容 |
 |---|---|
 | 名称 | `Jewel`（可自定义） |
 | 类型 | `流式 HTTP` / `Streamable HTTP` |
 | MCP 地址 / Server URL | `https://你的域名/mcp`，例如 `https://jewel.example.com/mcp` |
+| Bearer 令牌环境变量 | `JEWEL_MCP_TOKEN` |
 | Header 1 名称 | `X-Jewel-Access-Key` |
 | Header 1 值 | MCP 页面中复制的平台 Access Key |
-| Header 2 名称 | `Authorization` |
-| Header 2 值 | `Bearer ` 加上新建的 MCP Token，例如 `Bearer jwl_mcp_xxx` |
+
+不要手动添加 `Authorization` 标头：该客户端会从 “Bearer 令牌环境变量” 中读取 Token 并自动发送它。下方“来自环境变量的标头”也不需要填写。
 
 如果 Jewel 直接以默认端口对可信内网提供服务，地址可以是 `http://服务器地址:330/mcp`；公网部署必须经由 HTTPS 反向代理，并在代理中原样转发 `Authorization` 与 `X-Jewel-Access-Key` 两个请求头。**不要**把 Access Key 或 Token 拼接到 URL 查询参数中，也不要将其发到聊天、Issue 或日志里。
 
-保存后可先让客户端执行“列出 Jewel 项目”或“检查 Jewel 更新”验证连接。若客户端提示 401，请检查地址末尾是否为 `/mcp`、Token 是否仍有效，以及 `Authorization` 的值是否包含 `Bearer` 后的一个空格。
+保存后请新建一个对话，再让客户端执行“列出 Jewel 项目”或“检查 Jewel 更新”验证连接。连接器工具会在对话开始时加载，已经打开的旧对话不会自动获得新工具。若客户端提示 401，请检查地址末尾是否为 `/mcp`、已完全重启客户端，以及 `JEWEL_MCP_TOKEN` 是否仍有效。浏览器直接打开 `/mcp` 会得到“仅支持 POST”的响应，这是正常的 MCP 协议行为，不能作为连通性测试。
 
 ### MCP 工具清单
 

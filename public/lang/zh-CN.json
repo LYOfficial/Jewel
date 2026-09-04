@@ -345,6 +345,7 @@
   "mcp.status": "状态",
   "mcp.active": "有效",
   "mcp.expired": "已过期",
+  "mcp.failed": "失败",
   "mcp.revoke": "撤销",
   "mcp.confirmRevoke": "确定撤销此 MCP Token？撤销后无法恢复。",
   "mcp.revoked": "已撤销",

@@ -406,6 +406,7 @@
   "mcp.status": "狀態",
   "mcp.active": "有效",
   "mcp.expired": "已過期",
+  "mcp.failed": "失敗",
   "mcp.revoke": "撤銷",
   "mcp.confirmRevoke": "確定撤銷此 MCP Token？撤銷後無法復原。",
   "mcp.revoked": "已撤銷",

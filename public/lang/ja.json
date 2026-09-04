@@ -408,6 +408,7 @@
   "mcp.status": "状態",
   "mcp.active": "有効",
   "mcp.expired": "期限切れ",
+  "mcp.failed": "失敗",
   "mcp.revoke": "無効化",
   "mcp.confirmRevoke": "この MCP Token を無効化しますか？元に戻せません。",
   "mcp.revoked": "無効化済み",

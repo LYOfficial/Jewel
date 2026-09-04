@@ -53,11 +53,14 @@ test('dashboard uses the short comparable host CPU sample returned with Jewel st
   assert.match(dashboard, /this\.setHostCpu\(resource\.host_cpu_percent\)/);
 });
 
-test('Jewel platform metrics use a compact inline dashboard layout', () => {
+test('Jewel and network metrics use compact inline layouts while host resources retain rings', () => {
   const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'css', 'style.css'), 'utf8');
   assert.match(dashboard, /class="jewel-resource-inline"/);
-  assert.match(dashboard, /class="host-resource-inline"/);
-  assert.match(css, /\.jewel-resource-inline,[\s\S]*?\.host-resource-inline \{ display: flex; align-items: center;/);
+  assert.match(dashboard, /class="network-inline"/);
+  assert.match(dashboard, /class="monitor-grid"/);
+  assert.match(dashboard, /id="cpuRing"/);
+  assert.match(dashboard, /drawRing\(canvasId, percent, color\)/);
+  assert.match(css, /\.jewel-resource-inline,[\s\S]*?\.network-inline \{ display: flex; align-items: center;/);
   assert.match(css, /\.jewel-resource-item > small \{ display: none; \}/);
 });
 

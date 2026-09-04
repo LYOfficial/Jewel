@@ -26,23 +26,33 @@ const Dashboard = {
         </div>
       </div>
 
-      <div class="card host-resource-card" id="hostResourceCard">
-        <div class="host-resource-inline">
-          <div class="host-resource-heading">
-            <div class="card-title" data-i18n="dashboard.hostResources">主机资源</div>
-          </div>
-          <div class="host-resource-item"><span>CPU</span><strong id="cpuValue">--</strong></div>
-          <div class="host-resource-item"><span data-i18n="dashboard.memory">内存</span><strong id="memValue">--</strong></div>
-          <div class="host-resource-item"><span data-i18n="dashboard.storage">存储</span><strong id="diskValue">--</strong></div>
+      <!-- Host resource rings -->
+      <div class="monitor-grid" id="monitorGrid">
+        <div class="ring-card">
+          <div class="ring-wrap"><canvas id="cpuRing" width="120" height="120"></canvas></div>
+          <div class="ring-label">CPU</div>
+          <div class="ring-value" id="cpuValue">--</div>
+        </div>
+        <div class="ring-card">
+          <div class="ring-wrap"><canvas id="memRing" width="120" height="120"></canvas></div>
+          <div class="ring-label" data-i18n="dashboard.memory">内存</div>
+          <div class="ring-value" id="memValue">--</div>
+        </div>
+        <div class="ring-card">
+          <div class="ring-wrap"><canvas id="diskRing" width="120" height="120"></canvas></div>
+          <div class="ring-label" data-i18n="dashboard.storage">存储</div>
+          <div class="ring-value" id="diskValue">--</div>
         </div>
       </div>
 
       <!-- Network Stats -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title" data-i18n="dashboard.network">网络流量</div>
+      <div class="card dashboard-network-card">
+        <div class="network-inline">
+          <div class="network-heading">
+            <div class="card-title" data-i18n="dashboard.network">网络流量</div>
+          </div>
+          <div class="net-stats" id="netStats">--</div>
         </div>
-        <div class="net-stats" id="netStats">--</div>
       </div>
 
       <!-- Projects + Notes Row -->
@@ -100,11 +110,16 @@ const Dashboard = {
         <span data-i18n="dashboard.uptime">运行</span>: ${formatUptime(m.uptime)}
       `;
 
-      // Rings
+      // Host resource rings. CPU is refreshed with the short sampling window
+      // returned by the Jewel resource endpoint so the two CPU readings stay
+      // directly comparable.
       this.latestHostCpuPercent = m.cpuPercent;
 
+      this.drawRing('memRing', m.memPercent, this.themeColor('--ring-accent'));
       document.getElementById('memValue').textContent = formatBytes(m.memUsed) + ' / ' + formatBytes(m.memTotal);
 
+      const diskPct = m.diskInfo?.percent || 0;
+      this.drawRing('diskRing', diskPct, this.themeColor('--ring-accent'));
       document.getElementById('diskValue').textContent = formatBytes(m.diskInfo?.used || 0) + ' / ' + formatBytes(m.diskInfo?.total || 0);
 
       // Network
@@ -134,6 +149,7 @@ const Dashboard = {
 
   setHostCpu(percent) {
     const normalized = Math.max(0, Math.round((Number(percent) || 0) * 10) / 10);
+    this.drawRing('cpuRing', normalized, this.themeColor('--ring-accent'));
     const value = document.getElementById('cpuValue');
     if (value) value.textContent = normalized + '%';
   },
@@ -192,6 +208,42 @@ const Dashboard = {
     } finally {
       this.jewelResourceLoading = false;
     }
+  },
+
+  drawRing(canvasId, percent, color) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const size = 120;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+
+    const cx = size / 2, cy = size / 2, r = 48, lw = 8;
+    const start = -Math.PI / 2;
+    const end = start + (Math.PI * 2 * Math.min(Math.max(Number(percent) || 0, 0), 100) / 100);
+
+    ctx.clearRect(0, 0, size, size);
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = this.themeColor('--ring-track');
+    ctx.lineWidth = lw;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, start, end);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  },
+
+  themeColor(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#3b82f6';
   },
 
   // ===== Projects =====

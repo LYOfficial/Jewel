@@ -18,7 +18,7 @@ const Mcp = {
             <div class="form-group">
               <label data-i18n="mcp.endpoint">MCP 地址</label>
               <div style="display:flex;gap:8px">
-                <input id="mcpEndpoint" readonly>
+                <input id="mcpEndpoint" type="text" readonly>
                 <button class="btn btn-secondary" id="copyMcpEndpoint" type="button" data-i18n="mcp.copy">复制</button>
               </div>
             </div>
@@ -149,7 +149,7 @@ const Mcp = {
 
   showCreateToken() {
     const content = `
-      <div class="form-group"><label data-i18n="mcp.tokenName">名称</label><input id="newMcpTokenName" maxlength="100" placeholder="ChatGPT maintenance"></div>
+      <div class="form-group"><label data-i18n="mcp.tokenName">名称</label><input id="newMcpTokenName" type="text" maxlength="100" placeholder="ChatGPT maintenance"></div>
       <div class="form-group"><label data-i18n="mcp.duration">有效时长（小时）</label><input id="newMcpTokenDuration" type="number" min="0" max="87600" step="1" value="720"><span class="form-hint" data-i18n="mcp.durationHint">填 0 表示永不过期；建议为不同客户端创建独立、有限期 Token。</span></div>`;
     Modal.show(I18n.t('mcp.createToken') || 'Create token', content, [
       { label: I18n.t('common.cancel') || 'Cancel', class: 'btn-secondary' },
@@ -166,7 +166,7 @@ const Mcp = {
       const result = await API.createMcpToken({ name, expires_in_hours: duration });
       Modal.show(I18n.t('mcp.tokenCreated') || 'Token created', `
         <p data-i18n="mcp.saveTokenWarning">请立即复制此 Token。关闭后无法再次查看完整内容。</p>
-        <div class="form-group"><input id="createdMcpToken" readonly value="${App.escapeHtml(result.value)}"></div>`, [
+        <div class="form-group"><input id="createdMcpToken" type="text" readonly value="${App.escapeHtml(result.value)}"></div>`, [
         { label: I18n.t('common.close') || 'Close', class: 'btn-secondary' },
         { label: I18n.t('mcp.copy') || 'Copy', class: 'btn-primary', onClick: () => App.copyText(result.value, I18n.t('mcp.copied') || 'Copied') }
       ]);

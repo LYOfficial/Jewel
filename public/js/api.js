@@ -132,6 +132,10 @@ const API = {
   },
   checkProjectUpdate(id) { return this.post(`/projects/${id}/check-update`); },
 
+  // Read-only project metrics integration
+  getProjectMetricsConfig() { return this.get('/system/project-metrics/config'); },
+  rotateProjectMetricsKey() { return this.post('/system/project-metrics/rotate'); },
+
   // Containers
   getContainers(all = false) { return this.get(`/containers?all=${all}`); },
   getContainer(id) { return this.get(`/containers/${id}`); },

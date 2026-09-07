@@ -466,7 +466,7 @@ const Projects = {
           <div>
             <span class="badge badge-${project.status}">${esc(I18n.t(`status.${project.status}`) || project.status)}</span>
             <strong>${esc(project.name)}</strong>
-            <small>${esc(project.git_branch)} · ${esc(commitShort)}</small>
+            <small>项目编号 ${project.id} · ${esc(project.git_branch)} · ${esc(commitShort)}</small>
           </div>
           <button class="btn btn-sm" type="button" onclick="Modal.close();App.navigate('backups')">打开备份中心</button>
         </div>

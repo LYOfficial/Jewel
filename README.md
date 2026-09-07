@@ -222,6 +222,19 @@ Jewel 会检查 GitHub `main` 分支是否存在更新，但不会自动安装�
 | `/data/projects/` | 克隆的项目工作目录 |
 | `/data/backups/staging/` | 备份任务的本地暂存归档 |
 
+## 项目资源只读接口
+
+Jewel 可以向受信任的站点提供某个 Docker Compose 项目的 CPU、内存和存储汇总。前往 Jewel「设置 → 项目资源只读接口」复制独立访问密钥；在「项目」中打开目标项目详情，可在名称下方找到项目编号。
+
+```http
+GET https://jewel.example.com/api/project-metrics/{项目编号}
+X-Jewel-Project-Metrics-Key: <访问密钥>
+```
+
+该密钥独立于 Jewel 登录、MCP 和 Git 凭据，只允许读取项目的汇总数字。接口不返回容器、镜像、卷或项目名称，也不具备任何管理操作权限。返回的空间为项目关联镜像、容器可写层和命名卷之和，目录挂载不计入；CPU、内存仅汇总运行中的项目容器。接口密钥不能放入 URL 查询参数；轮换后，所有调用方都必须立即更新。
+
+完整字段与 vUSTB 接入流程见 [vUSTB 的 Jewel 项目资源接口文档](https://github.com/iJunecn/vUSTB/blob/main/ref/JEWEL_PROJECT_METRICS.md)。
+
 ## MCP 服务：让 AI 在受限范围内维护 Jewel
 
 Jewel 内置了符合 **Streamable HTTP** 传输方式的 MCP 服务。支持 MCP 的 AI 客户端可以读取项目状态、操作历史、部署日志、失败诊断和运行日志，并在已有项目上执行部署、检查更新、拉取更新并部署、重构、重启，以及检查或应用 Jewel 自身更新。

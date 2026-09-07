@@ -4,6 +4,7 @@ const db = require('./database');
 const { authMiddleware } = require('./auth');
 const updateService = require('./update-service');
 const dockerService = require('./docker-service');
+const projectMetricsAuth = require('./project-metrics-auth-service');
 
 const router = express.Router();
 
@@ -24,6 +25,28 @@ router.get('/info', async (req, res) => {
   }
 
   res.json(info);
+});
+
+// The project metrics key is deliberately separate from web JWTs and MCP
+// credentials.  It authorizes one read-only aggregate endpoint only.
+router.get('/project-metrics/config', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('Pragma', 'no-cache');
+  res.json({
+    access_key: projectMetricsAuth.getAccessKey(),
+    header_name: 'X-Jewel-Project-Metrics-Key',
+    endpoint_path_template: '/api/project-metrics/{project_id}'
+  });
+});
+
+router.post('/project-metrics/rotate', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('Pragma', 'no-cache');
+  res.json({
+    access_key: projectMetricsAuth.rotateAccessKey(),
+    header_name: 'X-Jewel-Project-Metrics-Key',
+    endpoint_path_template: '/api/project-metrics/{project_id}'
+  });
 });
 
 router.get('/monitor', (req, res) => {
@@ -231,9 +254,9 @@ router.post('/update/apply', async (req, res) => {
 });
 
 router.get('/settings', (req, res) => {
-  // MCP access credentials have their own authenticated endpoint and must
+  // Integration access credentials have their own authenticated endpoint and must
   // never be included in the general settings payload used across the UI.
-  const settings = db.prepare("SELECT * FROM settings WHERE key != 'mcp_access_key'").all();
+  const settings = db.prepare("SELECT * FROM settings WHERE key NOT IN ('mcp_access_key', 'project_metrics_access_key')").all();
   const obj = {};
   for (const s of settings) obj[s.key] = s.value;
   res.json(obj);
@@ -274,10 +297,10 @@ function getUTCOffset(tz) {
 router.put('/settings', (req, res) => {
   const upsert = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
   for (const [key, value] of Object.entries(req.body)) {
-    if (key === 'mcp_access_key') continue;
+    if (key === 'mcp_access_key' || key === 'project_metrics_access_key') continue;
     upsert.run(key, String(value));
   }
-  const settings = db.prepare("SELECT * FROM settings WHERE key != 'mcp_access_key'").all();
+  const settings = db.prepare("SELECT * FROM settings WHERE key NOT IN ('mcp_access_key', 'project_metrics_access_key')").all();
   const obj = {};
   for (const s of settings) obj[s.key] = s.value;
   res.json(obj);

@@ -15,6 +15,7 @@ const routesTokens = require('./routes-tokens');
 const routesBackups = require('./routes-backups');
 const routesMcp = require('./routes-mcp');
 const routesMcpManagement = require('./routes-mcp-management');
+const routesProjectMetrics = require('./routes-project-metrics');
 const backupService = require('./backup-service');
 
 const app = express();
@@ -42,6 +43,7 @@ app.use('/api/system', routesSystem);
 app.use('/api/tokens', routesTokens);
 app.use('/api/backups', routesBackups);
 app.use('/api/mcp', routesMcpManagement);
+app.use('/api/project-metrics', routesProjectMetrics);
 // Keep the browser-facing MCP management page at /mcp. The protocol itself
 // lives at a distinct endpoint so a page navigation can never be mistaken for
 // a long-lived Streamable HTTP/SSE connection.

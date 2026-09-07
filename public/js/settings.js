@@ -86,6 +86,28 @@ const Settings = {
 
       <div class="card">
         <div class="card-header">
+          <div class="card-title">项目资源只读接口</div>
+        </div>
+        <p style="margin-top:0;color:var(--text-muted);font-size:13px;line-height:1.6">供受信任的站点读取某个 Jewel 项目的汇总 CPU、内存与存储占用；不提供容器、镜像、卷名称或任何操作权限。</p>
+        <div class="form-group">
+          <label>接口地址模板</label>
+          <input id="projectMetricsEndpoint" type="text" readonly>
+          <span class="form-hint">将 <code>{project_id}</code> 替换为 Jewel 项目详情页显示的项目编号。</span>
+        </div>
+        <div class="form-group">
+          <label>访问密钥</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="projectMetricsAccessKey" type="password" readonly style="min-width:0;flex:1">
+            <button class="btn btn-sm" id="toggleProjectMetricsKey" type="button">显示</button>
+            <button class="btn btn-sm" id="copyProjectMetricsKey" type="button">复制</button>
+          </div>
+          <span class="form-hint">只填写到受信任服务的密钥管理页面；轮换后需同步更新所有调用方。</span>
+        </div>
+        <button class="btn btn-danger btn-sm" id="rotateProjectMetricsKey" type="button">轮换访问密钥</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
           <div class="card-title" data-i18n="settings.account">账户管理</div>
         </div>
         <div class="form-group">
@@ -114,15 +136,60 @@ const Settings = {
     document.getElementById('saveSettings').addEventListener('click', () => this.saveSettings());
     document.getElementById('changePwdBtn').addEventListener('click', () => this.changePassword());
     document.getElementById('refreshUpdateBtn').addEventListener('click', () => this.checkUpdate(true));
+    document.getElementById('toggleProjectMetricsKey').addEventListener('click', () => this.toggleProjectMetricsKey());
+    document.getElementById('copyProjectMetricsKey').addEventListener('click', () => this.copyProjectMetricsKey());
+    document.getElementById('rotateProjectMetricsKey').addEventListener('click', () => this.rotateProjectMetricsKey());
 
     document.getElementById('settingTimezone').addEventListener('change', (e) => {
       this.updateTimezonePreview(e.target.value);
     });
 
     this.loadSystemInfo();
+    this.loadProjectMetricsConfig();
     // Entering Settings should show a newly checked version, just like a
     // full page refresh. The server deduplicates it with App.pollUpdate().
     this.checkUpdate(true);
+  },
+
+  async loadProjectMetricsConfig() {
+    try {
+      const config = await API.getProjectMetricsConfig();
+      const endpoint = document.getElementById('projectMetricsEndpoint');
+      const key = document.getElementById('projectMetricsAccessKey');
+      if (endpoint) endpoint.value = `${window.location.origin}${config.endpoint_path_template || '/api/project-metrics/{project_id}'}`;
+      if (key) key.value = config.access_key || '';
+    } catch (err) {
+      Notify.error(err.message);
+    }
+  },
+
+  toggleProjectMetricsKey() {
+    const input = document.getElementById('projectMetricsAccessKey');
+    const button = document.getElementById('toggleProjectMetricsKey');
+    if (!input || !button) return;
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    button.textContent = showing ? '显示' : '隐藏';
+  },
+
+  copyProjectMetricsKey() {
+    const value = document.getElementById('projectMetricsAccessKey')?.value || '';
+    if (value) App.copyText(value, '已复制访问密钥');
+  },
+
+  async rotateProjectMetricsKey() {
+    if (!confirm('轮换后，当前使用此密钥的站点将立即无法读取资源数据。确定继续？')) return;
+    try {
+      const config = await API.rotateProjectMetricsKey();
+      const key = document.getElementById('projectMetricsAccessKey');
+      if (key) {
+        key.value = config.access_key || '';
+        key.type = 'text';
+      }
+      const button = document.getElementById('toggleProjectMetricsKey');
+      if (button) button.textContent = '隐藏';
+      Notify.success('访问密钥已轮换，请立即复制并更新调用方');
+    } catch (err) { Notify.error(err.message); }
   },
 
   updateTimezonePreview(tz) {

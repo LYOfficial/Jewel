@@ -32,6 +32,7 @@ db.exec(`
     git_url TEXT NOT NULL,
     git_token TEXT DEFAULT '',
     git_branch TEXT DEFAULT 'main',
+    source_type TEXT DEFAULT 'git',
     compose_path TEXT DEFAULT 'docker-compose.yml',
     env_vars TEXT DEFAULT '{}',
     auto_deploy INTEGER DEFAULT 0,
@@ -173,6 +174,7 @@ function addColumnIfMissing(table, column, definition) {
 addColumnIfMissing('projects', 'container_name', "TEXT DEFAULT ''");
 addColumnIfMissing('projects', 'reuse_volumes', 'INTEGER DEFAULT 0');
 addColumnIfMissing('projects', 'auto_deploy', 'INTEGER DEFAULT 0');
+addColumnIfMissing('projects', 'source_type', "TEXT DEFAULT 'git'");
 addColumnIfMissing('projects', 'commit_hash', "TEXT DEFAULT ''");
 addColumnIfMissing('projects', 'remote_commit', "TEXT DEFAULT ''");
 addColumnIfMissing('projects', 'update_available', 'INTEGER DEFAULT 0');

@@ -71,6 +71,7 @@ async function checkProjectUpdate(projectId, { autoDeploy = false, waitForLock =
   return withProjectOperationLock(projectId, async () => {
     const project = db.prepare('SELECT * FROM projects WHERE id=?').get(projectId);
     if (!project) return null;
+    if (project.source_type === 'compose') return project;
 
     try {
       const localCommit = await gitService.getRepoCommit(project.id);

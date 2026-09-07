@@ -118,8 +118,8 @@ test('project details split the dashboard from deployment configuration', () => 
   assert.match(projectsSource, /operation\.commit_hash/);
   assert.match(projectsSource, /id="projAutoDeploy"/);
   assert.match(projectsSource, /id="detailAutoDeploy"/);
-  assert.match(projectsSource, /auto_deploy: document\.getElementById\('projAutoDeploy'\)\.checked/);
-  assert.match(projectsSource, /auto_deploy: document\.getElementById\('detailAutoDeploy'\)\.checked/);
+  assert.match(projectsSource, /data\.auto_deploy = document\.getElementById\('projAutoDeploy'\)\.checked/);
+  assert.match(projectsSource, /data\.auto_deploy = document\.getElementById\('detailAutoDeploy'\)\.checked/);
 });
 
 test('project updates prepare a Jewel-managed .env file before pulling', () => {
@@ -134,6 +134,14 @@ test('rebuild replaces the cloned repository before deployment', () => {
   assert.match(dockerServiceSource, /projectEnvService\.syncProjectEnvFile\(project\)/);
 });
 
+test('project creation supports a direct Docker Compose source', () => {
+  assert.match(projectsSource, /name="projSourceType" value="compose"/);
+  assert.match(projectsSource, /id="projComposeContent"/);
+  assert.match(projectsSource, /source_type: sourceType/);
+  assert.match(projectRoutesSource, /composeProjectService\.writeComposeProject\(projectId, compose_content\)/);
+  assert.match(projectRoutesSource, /source_type === 'compose'/);
+});
+
 test('project action menu always includes check update', async () => {
   const harness = createProjectsHarness(project);
 
@@ -145,6 +153,16 @@ test('project action menu always includes check update', async () => {
   assert.equal(checkUpdate.onclick, 'Projects.checkUpdate(42, true)');
   assert.equal(checkUpdate.visible, undefined);
   assert.equal(update.visible, false);
+});
+
+test('direct Docker Compose projects hide Git-only actions', async () => {
+  const harness = createProjectsHarness({ ...project, source_type: 'compose' });
+  await harness.Projects.loadList();
+
+  const actions = harness.actionMenus.at(-1);
+  assert.equal(actions.find(action => action.label === '检查更新').visible, false);
+  assert.equal(actions.find(action => action.label === '更新').visible, false);
+  assert.equal(actions.find(action => action.label === '重构').visible, false);
 });
 
 test('checking an update refreshes the action menu with update available', async () => {

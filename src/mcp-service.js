@@ -21,6 +21,7 @@ function publicProject(project) {
   return {
     id: project.id,
     name: project.name,
+    source_type: project.source_type || 'git',
     git_url: project.git_url,
     git_branch: project.git_branch,
     compose_path: project.compose_path,
@@ -100,16 +101,25 @@ async function getProject(args) {
 
 async function checkProjectUpdate(args) {
   const project = projectById(args.project_id);
+  if (project.source_type === 'compose') {
+    throw new Error('Direct Docker Compose projects do not have Git updates');
+  }
   const updated = await projectUpdateService.checkProjectUpdate(project.id, { waitForLock: true });
   return publicProject(updated || project);
 }
 
 async function deployProject(args, { requirePull = false } = {}) {
   const project = projectById(args.project_id);
+  if (project.source_type === 'compose' && requirePull) {
+    throw new Error('Direct Docker Compose projects do not have Git updates');
+  }
   const { operation, result } = await runProjectOperation(project, {
     action: requirePull ? 'update' : 'deploy',
     activeStatus: 'deploying',
     work: async () => {
+      if (project.source_type === 'compose') {
+        return { output: await dockerService.deployProject(project) };
+      }
       await gitService.prepareManagedEnvFileForPull(project);
       if (requirePull) {
         await gitService.pullRepo(project.id, project.git_branch);
@@ -131,6 +141,9 @@ async function deployProject(args, { requirePull = false } = {}) {
 
 async function rebuildProject(args) {
   const project = projectById(args.project_id);
+  if (project.source_type === 'compose') {
+    throw new Error('Rebuild is only available for Git projects');
+  }
   const { operation, result } = await runProjectOperation(project, {
     action: 'rebuild',
     activeStatus: 'rebuilding',

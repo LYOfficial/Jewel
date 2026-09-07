@@ -26,6 +26,7 @@ test('creates operation and backup schema on a fresh data directory', { skip: !h
     assert.equal(operationColumns.has('commit_hash'), true);
     const projectColumns = new Set(db.prepare('PRAGMA table_info(projects)').all().map(row => row.name));
     assert.equal(projectColumns.has('auto_deploy'), true);
+    assert.equal(projectColumns.has('source_type'), true);
 
     const project = db.prepare('INSERT INTO projects (name, git_url, commit_hash) VALUES (?, ?, ?)')
       .run('commit-snapshot', 'https://example.invalid/repo.git', 'initial-commit');

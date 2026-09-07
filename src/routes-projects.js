@@ -3,6 +3,7 @@ const db = require('./database');
 const { authMiddleware } = require('./auth');
 const gitService = require('./git-service');
 const dockerService = require('./docker-service');
+const composeProjectService = require('./compose-project-service');
 const projectEnvService = require('./project-env-service');
 const projectUpdateService = require('./project-update-service');
 const { withProjectOperationLock } = require('./project-operation-lock');
@@ -117,28 +118,65 @@ router.get('/:id', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, git_url, git_token, git_branch, compose_path, env_vars, container_name, reuse_volumes, auto_deploy } = req.body;
+  const { name, git_url, git_token, git_branch, compose_path, env_vars, container_name, reuse_volumes, auto_deploy, source_type, compose_content } = req.body;
+  const isComposeProject = source_type === 'compose';
 
-  if (!name || !git_url) {
+  if (!name) {
+    return res.status(400).json({ error: 'Name is required' });
+  }
+  if (!isComposeProject && !git_url) {
     return res.status(400).json({ error: 'Name and git_url are required' });
+  }
+  if (isComposeProject) {
+    try {
+      composeProjectService.validateComposeContent(compose_content);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
   }
 
   const result = db.prepare(`
-    INSERT INTO projects (name, git_url, git_token, git_branch, compose_path, env_vars, container_name, reuse_volumes, auto_deploy)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO projects (name, git_url, git_token, git_branch, source_type, compose_path, env_vars, container_name, reuse_volumes, auto_deploy)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name,
-    git_url,
-    git_token || '',
-    git_branch || 'main',
-    compose_path || 'docker-compose.yml',
+    isComposeProject ? '' : git_url,
+    isComposeProject ? '' : (git_token || ''),
+    isComposeProject ? '' : (git_branch || 'main'),
+    isComposeProject ? 'compose' : 'git',
+    isComposeProject ? 'docker-compose.yml' : (compose_path || 'docker-compose.yml'),
     JSON.stringify(env_vars || {}),
     container_name || '',
     reuse_volumes ? 1 : 0,
-    auto_deploy ? 1 : 0
+    isComposeProject ? 0 : (auto_deploy ? 1 : 0)
   );
 
   const projectId = Number(result.lastInsertRowid);
+  if (isComposeProject) {
+    const operationId = operationService.start({
+      projectId,
+      action: 'compose-deploy',
+      metadata: { project_name: name, source_type: 'compose' }
+    });
+    try {
+      db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('deploying', projectId);
+      composeProjectService.writeComposeProject(projectId, compose_content);
+      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+      const output = await dockerService.deployProject(project);
+      db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('running', projectId);
+      operationService.succeed(operationId, {
+        summary: `Docker Compose deployed for ${name}`,
+        detail: tailLines(output, 80)
+      });
+      return res.status(201).json(db.prepare(projectQuery('WHERE p.id = ?')).get(projectId));
+    } catch (err) {
+      db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('error', projectId);
+      const operation = operationService.fail(operationId, err, { summary: `Docker Compose deployment failed for ${name}` });
+      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+      return operationErrorResponse(res, project, operation, err, 422);
+    }
+  }
+
   const operationId = operationService.start({
     projectId,
     action: 'clone',
@@ -180,12 +218,14 @@ router.put('/:id', async (req, res) => {
 
   const containerNameVal = container_name !== undefined ? container_name : project.container_name;
   const reuseVolumesVal = reuse_volumes !== undefined ? (reuse_volumes ? 1 : 0) : project.reuse_volumes;
-  const autoDeployVal = auto_deploy !== undefined ? (auto_deploy ? 1 : 0) : project.auto_deploy;
+  const autoDeployVal = project.source_type === 'compose' ? 0 :
+    (auto_deploy !== undefined ? (auto_deploy ? 1 : 0) : project.auto_deploy);
 
-  const repoChanged =
+  const repoChanged = project.source_type !== 'compose' && (
     git_url !== project.git_url ||
     git_branch !== project.git_branch ||
-    git_token !== project.git_token;
+    git_token !== project.git_token
+  );
 
   db.prepare(`
     UPDATE projects SET name=?, git_url=?, git_token=?, git_branch=?, compose_path=?,
@@ -252,6 +292,9 @@ router.post('/:id/deploy', async (req, res) => {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
   const requirePull = Boolean(req.body && req.body.require_pull);
+  if (project.source_type === 'compose' && requirePull) {
+    return res.status(400).json({ error: 'Direct Docker Compose projects do not have Git updates' });
+  }
 
   return runProjectOperation({
     res,
@@ -260,6 +303,9 @@ router.post('/:id/deploy', async (req, res) => {
     activeStatus: 'deploying',
     successStatus: 'running',
     work: async () => {
+      if (project.source_type === 'compose') {
+        return { output: await dockerService.deployProject(project) };
+      }
       if (requirePull) {
         // The update action was shown because an upstream commit exists. Do
         // not silently deploy the previous checkout if Git cannot retrieve it.
@@ -288,6 +334,9 @@ router.post('/:id/deploy', async (req, res) => {
 router.post('/:id/rebuild', async (req, res) => {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (project.source_type === 'compose') {
+    return res.status(400).json({ error: 'Rebuild is only available for Git projects' });
+  }
 
   return runProjectOperation({
     res,
@@ -347,6 +396,10 @@ router.post('/:id/restart', async (req, res) => {
 });
 
 router.post('/:id/check-update', async (req, res) => {
+  const project = db.prepare('SELECT source_type FROM projects WHERE id = ?').get(req.params.id);
+  if (project && project.source_type === 'compose') {
+    return res.status(400).json({ error: 'Direct Docker Compose projects do not have Git updates' });
+  }
   try {
     const updated = await projectUpdateService.checkProjectUpdate(req.params.id, { waitForLock: false });
     if (!updated) return res.status(404).json({ error: 'Project not found' });

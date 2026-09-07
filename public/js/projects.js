@@ -45,17 +45,17 @@ const Projects = {
               <span class="badge badge-${p.status}">${esc(I18n.t(`status.${p.status}`) || p.status)}</span>
               ${p.last_operation_status === 'failed' ? `<div class="table-subtext error-text" title="${esc(p.last_operation_summary || '')}">最近操作失败</div>` : ''}
             </td>
-            <td>${esc(p.git_branch)}</td>
+            <td>${p.source_type === 'compose' ? esc(I18n.t('project.localCompose') || '本地 Compose') : esc(p.git_branch)}</td>
             <td>
               ${p.commit_hash ? `<span class="commit-sha">${esc(p.commit_hash.substring(0,7))}</span>` : '<span class="text-muted">-</span>'}
               ${p.update_available ? `<span class="badge badge-update" data-i18n="project.updateAvailable">有更新</span>` : ''}
             </td>
             <td class="action-cell" data-project-actions="${p.id}">
               ${App.actionMenu([
-                { label: I18n.t('project.checkUpdate') || '检查更新', icon: '⌕', onclick: `Projects.checkUpdate(${p.id}, true)` },
-                { label: I18n.t('project.update') || '更新', icon: '↥', visible: !!p.update_available, onclick: `Projects.updateProject(${p.id})` },
+                { label: I18n.t('project.checkUpdate') || '检查更新', icon: '⌕', visible: p.source_type === 'compose' ? false : undefined, onclick: `Projects.checkUpdate(${p.id}, true)` },
+                { label: I18n.t('project.update') || '更新', icon: '↥', visible: p.source_type !== 'compose' && !!p.update_available, onclick: `Projects.updateProject(${p.id})` },
                 { label: I18n.t('project.deploy') || '部署', icon: '▶', onclick: `Projects.deploy(${p.id})` },
-                { label: I18n.t('project.rebuild') || '重构', icon: '↻', onclick: `Projects.rebuild(${p.id})` },
+                { label: I18n.t('project.rebuild') || '重构', icon: '↻', visible: p.source_type !== 'compose', onclick: `Projects.rebuild(${p.id})` },
                 { label: I18n.t('project.stop') || '停止', icon: '■', onclick: `Projects.stop(${p.id})` },
                 { label: I18n.t('project.detail') || '详情', icon: '⌕', onclick: `Projects.showDetail(${p.id})` },
                 { label: '复制最近失败诊断', icon: '⧉', visible: !!p.last_failure_id, onclick: `Projects.copyLatestError(${p.id})` },
@@ -92,6 +92,12 @@ const Projects = {
         <input type="text" id="projContainerName" placeholder="e.g. my-app (留空使用默认)">
       </div>
       <div class="form-group">
+        <label data-i18n="project.sourceType">项目来源</label>
+        <label class="option-card"><input type="radio" name="projSourceType" value="git" checked><span><strong data-i18n="project.gitSource">Git 仓库</strong></span></label>
+        <label class="option-card"><input type="radio" name="projSourceType" value="compose"><span><strong data-i18n="project.composeSource">直接 Docker Compose</strong><small data-i18n="project.composeSourceHint">保存 docker-compose.yml 后立即创建容器；相对路径保存在此项目的工作目录。</small></span></label>
+      </div>
+      <div id="projGitFields">
+      <div class="form-group">
         <label data-i18n="project.gitUrl">Git 仓库 URL</label>
         <input type="url" id="projGitUrl" placeholder="https://github.com/user/repo.git" required>
       </div>
@@ -123,6 +129,11 @@ const Projects = {
           <span><strong data-i18n="project.autoDeploy">自动更新部署</strong><small data-i18n="project.autoDeployHint">每 10 分钟检查一次；发现新提交后自动拉取并重新部署正在运行的项目。已停止项目只会标记更新。</small></span>
         </label>
       </div>
+      </div>
+      <div class="form-group" id="projComposeFields" hidden>
+        <label data-i18n="project.composeContent">docker-compose.yml 内容</label>
+        <textarea id="projComposeContent" rows="18" spellcheck="false" placeholder="services:\n  app:\n    image: nginx:alpine\n    ports:\n      - &quot;8080:80&quot;"></textarea>
+      </div>
       <div class="form-group">
         <label class="experimental-label">
           <input type="checkbox" id="projReuseVolumes">
@@ -148,37 +159,58 @@ const Projects = {
       document.getElementById('projManualTokenGroup').style.display =
         e.target.value === '__manual__' ? 'block' : 'none';
     });
+    document.querySelectorAll('input[name="projSourceType"]').forEach(input => {
+      input.addEventListener('change', () => {
+        const isComposeProject = input.value === 'compose' && input.checked;
+        document.getElementById('projGitFields').hidden = isComposeProject;
+        document.getElementById('projComposeFields').hidden = !isComposeProject;
+      });
+    });
   },
 
   async createProject() {
     // IMPORTANT: collect all form values synchronously first. The modal
     // auto-closes as soon as this handler returns, so any DOM read that
     // happens after an `await` will see an empty form.
-    const tokenSelect = document.getElementById('projTokenSelect').value;
+    const sourceType = document.querySelector('input[name="projSourceType"]:checked').value;
     const data = {
       name: document.getElementById('projName').value,
       container_name: document.getElementById('projContainerName').value.trim(),
-      git_url: document.getElementById('projGitUrl').value,
-      git_token: '',
-      git_branch: document.getElementById('projBranch').value || 'main',
-      compose_path: document.getElementById('projCompose').value || 'docker-compose.yml',
       reuse_volumes: document.getElementById('projReuseVolumes').checked,
-      auto_deploy: document.getElementById('projAutoDeploy').checked
+      source_type: sourceType
     };
 
-    if (tokenSelect === '__manual__') {
-      data.git_token = document.getElementById('projGitToken').value;
-    } else if (tokenSelect) {
-      // Resolve the saved token's secret by id (sync in id, async in value).
-      // We don't need any other DOM values at this point.
-      try {
-        const fullToken = await API.getToken(tokenSelect);
-        data.git_token = (fullToken && fullToken.token) || '';
-      } catch { /* ignore — leave token empty */ }
+    if (sourceType === 'compose') {
+      data.compose_content = document.getElementById('projComposeContent').value;
+      if (!data.name || !data.compose_content.trim()) {
+        Notify.error(I18n.t('project.nameAndComposeRequired') || 'Name and docker-compose.yml content are required');
+        return;
+      }
+    } else {
+      const tokenSelect = document.getElementById('projTokenSelect').value;
+      data.git_url = document.getElementById('projGitUrl').value;
+      data.git_token = '';
+      data.git_branch = document.getElementById('projBranch').value || 'main';
+      data.compose_path = document.getElementById('projCompose').value || 'docker-compose.yml';
+      data.auto_deploy = document.getElementById('projAutoDeploy').checked;
+
+      if (tokenSelect === '__manual__') {
+        data.git_token = document.getElementById('projGitToken').value;
+      } else if (tokenSelect) {
+        try {
+          const fullToken = await API.getToken(tokenSelect);
+          data.git_token = (fullToken && fullToken.token) || '';
+        } catch { /* ignore — leave token empty */ }
+      }
+
+      if (!data.name || !data.git_url) {
+        Notify.error(I18n.t('project.nameAndUrlRequired') || 'Name and URL are required');
+        return;
+      }
     }
 
-    if (!data.name || !data.git_url) {
-      Notify.error(I18n.t('project.nameAndUrlRequired') || 'Name and URL are required');
+    if (!data.name) {
+      Notify.error(I18n.t('project.nameRequired') || 'Name is required');
       return;
     }
 
@@ -437,12 +469,14 @@ const Projects = {
   async showDetail(id) {
     try {
       const project = await API.getProject(id);
+      const isComposeProject = project.source_type === 'compose';
       const envVars = JSON.parse(project.env_vars || '{}');
       const envText = Object.entries(envVars).map(([k, v]) => `${k}=${v}`).join('\n');
 
       let tokenOptions = '';
       let hasMatchingToken = false;
-      try {
+      if (!isComposeProject) {
+        try {
         const savedTokens = await API.getTokens();
         if (savedTokens.length > 0) {
           tokenOptions = savedTokens.map(t => {
@@ -451,7 +485,8 @@ const Projects = {
             return `<option value="${t.id}"${selected}>${esc(t.name)} (${t.provider}${t.host ? ' - ' + esc(t.host) : ''})</option>`;
           }).join('');
         }
-      } catch { /* ignore */ }
+        } catch { /* ignore */ }
+      }
 
       const commitShort = project.commit_hash ? project.commit_hash.substring(0, 7) : '-';
       const remoteShort = project.remote_commit ? project.remote_commit.substring(0, 7) : '';
@@ -466,7 +501,7 @@ const Projects = {
           <div>
             <span class="badge badge-${project.status}">${esc(I18n.t(`status.${project.status}`) || project.status)}</span>
             <strong>${esc(project.name)}</strong>
-            <small>项目编号 ${project.id} · ${esc(project.git_branch)} · ${esc(commitShort)}</small>
+            <small>项目编号 ${project.id} · ${isComposeProject ? esc(I18n.t('project.localCompose') || '本地 Compose') : `${esc(project.git_branch)} · ${esc(commitShort)}`}</small>
           </div>
           <button class="btn btn-sm" type="button" onclick="Modal.close();App.navigate('backups')">打开备份中心</button>
         </div>
@@ -486,6 +521,17 @@ const Projects = {
           <label data-i18n="project.containerName">容器名（选填）</label>
           <input type="text" id="detailContainerName" value="${esc(project.container_name || '')}" placeholder="e.g. my-app (留空使用默认)">
         </div>
+        ${isComposeProject ? `
+        <div class="form-group" id="detailComposeProject">
+          <label data-i18n="project.sourceType">项目来源</label>
+          <input type="text" value="${esc(I18n.t('project.localCompose') || '本地 Docker Compose')}" disabled>
+          <small data-i18n="project.composeProjectHint">此项目的 docker-compose.yml 已保存在 Jewel 工作目录中。可部署、停止和重启；不支持 Git 更新或重构。</small>
+        </div>
+        <div class="form-group">
+          <label data-i18n="project.composePath">Compose 路径</label>
+          <input type="text" id="detailCompose" value="${esc(project.compose_path)}" disabled>
+        </div>
+        ` : `
         <div class="form-group">
           <label data-i18n="project.gitUrl">Git 仓库 URL</label>
           <input type="url" id="detailGitUrl" value="${esc(project.git_url)}">
@@ -529,6 +575,7 @@ const Projects = {
             <span><strong data-i18n="project.autoDeploy">自动更新部署</strong><small data-i18n="project.autoDeployHint">每 10 分钟检查一次；发现新提交后自动拉取并重新部署正在运行的项目。已停止项目只会标记更新。</small></span>
           </label>
         </div>
+        `}
         <div class="form-group">
           <label class="experimental-label">
             <input type="checkbox" id="detailReuseVolumes" ${project.reuse_volumes ? 'checked' : ''}>
@@ -578,7 +625,7 @@ const Projects = {
       this.setDetailTab('dashboard');
       document.getElementById('refreshProjectDashboard')?.addEventListener('click', () => this.loadDashboardResources(id));
 
-      document.getElementById('detailTokenSelect').addEventListener('change', (e) => {
+      document.getElementById('detailTokenSelect')?.addEventListener('change', (e) => {
         document.getElementById('detailManualTokenGroup').style.display =
           e.target.value === '__manual__' ? 'block' : 'none';
       });
@@ -778,25 +825,29 @@ const Projects = {
   async saveProject(id) {
     // Collect DOM values synchronously before any await — the modal
     // closes as soon as this handler returns.
-    const tokenSelect = document.getElementById('detailTokenSelect').value;
+    const isComposeProject = Boolean(document.getElementById('detailComposeProject'));
     const data = {
       name: document.getElementById('detailName').value,
       container_name: document.getElementById('detailContainerName').value.trim(),
-      git_url: document.getElementById('detailGitUrl').value,
-      git_token: '',
-      git_branch: document.getElementById('detailBranch').value,
       compose_path: document.getElementById('detailCompose').value,
-      reuse_volumes: document.getElementById('detailReuseVolumes').checked,
-      auto_deploy: document.getElementById('detailAutoDeploy').checked
+      reuse_volumes: document.getElementById('detailReuseVolumes').checked
     };
 
-    if (tokenSelect === '__manual__') {
-      data.git_token = document.getElementById('detailGitToken').value;
-    } else if (tokenSelect) {
-      try {
-        const fullToken = await API.getToken(tokenSelect);
-        data.git_token = (fullToken && fullToken.token) || '';
-      } catch { /* ignore */ }
+    if (!isComposeProject) {
+      const tokenSelect = document.getElementById('detailTokenSelect').value;
+      data.git_url = document.getElementById('detailGitUrl').value;
+      data.git_token = '';
+      data.git_branch = document.getElementById('detailBranch').value;
+      data.auto_deploy = document.getElementById('detailAutoDeploy').checked;
+
+      if (tokenSelect === '__manual__') {
+        data.git_token = document.getElementById('detailGitToken').value;
+      } else if (tokenSelect) {
+        try {
+          const fullToken = await API.getToken(tokenSelect);
+          data.git_token = (fullToken && fullToken.token) || '';
+        } catch { /* ignore */ }
+      }
     }
 
     const envVars = {};

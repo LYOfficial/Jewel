@@ -1,10 +1,9 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const db = require('./database');
 const { authMiddleware } = require('./auth');
 const gitService = require('./git-service');
 const dockerService = require('./docker-service');
+const projectEnvService = require('./project-env-service');
 const projectUpdateService = require('./project-update-service');
 const { withProjectOperationLock } = require('./project-operation-lock');
 const operationService = require('./operation-service');
@@ -230,26 +229,10 @@ router.put('/:id/env', (req, res) => {
 
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
 
-  // Sync the .env file to disk immediately
+  // Keep the working copy in sync when settings are saved. Deploy/update
+  // repeat this synchronization after Git has completed as well.
   try {
-    const projectDir = path.join(
-      process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
-      'projects',
-      String(project.id)
-    );
-    const composePath = path.join(projectDir, project.compose_path);
-    if (fs.existsSync(composePath)) {
-      dockerService.ensureEnvFiles(projectDir, composePath);
-    }
-
-    let envStr = '';
-    try {
-      const parsed = JSON.parse(project.env_vars || '{}');
-      for (const [key, value] of Object.entries(parsed)) {
-        envStr += `${key}=${value}\n`;
-      }
-    } catch { /* ignore */ }
-    fs.writeFileSync(path.join(projectDir, '.env'), envStr || '', 'utf-8');
+    projectEnvService.syncProjectEnvFile(project);
   } catch { /* ignore — env file sync is best-effort */ }
 
   res.json(project);

@@ -4,6 +4,7 @@ const fs = require('fs');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const config = require('./config');
+const { renderProjectEnv } = require('./project-env-service');
 
 const execFileAsync = promisify(execFile);
 // A check is a lightweight status action. Cap only its remote fetch so an
@@ -86,15 +87,6 @@ function getGit(projectDir) {
 
 function invalidateGit(projectDir) {
   gitInstances.delete(projectDir);
-}
-
-function renderProjectEnv(envVars) {
-  try {
-    const parsed = JSON.parse(envVars || '{}');
-    return Object.entries(parsed).map(([key, value]) => `${key}=${value}\n`).join('');
-  } catch {
-    return '';
-  }
 }
 
 // Jewel writes the project-level environment variables to <repo>/.env before

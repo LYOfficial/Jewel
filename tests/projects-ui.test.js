@@ -130,6 +130,8 @@ test('project updates prepare a Jewel-managed .env file before pulling', () => {
 test('rebuild replaces the cloned repository before deployment', () => {
   assert.match(dockerServiceSource, /Step 3\/4 — deleting and recloning repository/);
   assert.match(dockerServiceSource, /gitService\.cloneRepo\(project\.git_url, project\.id, project\.git_branch, project\.git_token\)/);
+  assert.match(dockerServiceSource, /projectEnvService\.initializeRebuiltProjectEnv\(project\)/);
+  assert.match(dockerServiceSource, /projectEnvService\.syncProjectEnvFile\(project\)/);
 });
 
 test('project action menu always includes check update', async () => {

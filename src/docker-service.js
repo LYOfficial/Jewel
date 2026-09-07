@@ -6,6 +6,7 @@ const { exec, execSync } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 const gitService = require('./git-service');
+const projectEnvService = require('./project-env-service');
 const { cpuPercent, memoryUsage } = require('./project-resource-utils');
 const { findJewelContainer, summarizeJewelStorage } = require('./jewel-resource-utils');
 
@@ -315,17 +316,9 @@ async function deployProject(project, { appendLog = false } = {}) {
   // Ensure all env_file references exist before compose up
   ensureEnvFiles(projectDir, composePath);
 
-  let envStr = '';
-  try {
-    const envVars = JSON.parse(project.env_vars || '{}');
-    for (const [key, value] of Object.entries(envVars)) {
-      envStr += `${key}=${value}\n`;
-    }
-  } catch { /* ignore */ }
-
-  // Always write .env so docker compose never fails on a missing env_file
-  const envFile = path.join(projectDir, '.env');
-  fs.writeFileSync(envFile, envStr || '', 'utf-8');
+  // The deployment settings are the normal source of truth. Synchronize them
+  // only after Git has finished so a pull cannot undo the managed .env.
+  projectEnvService.syncProjectEnvFile(project);
 
   // If a custom container_name is set, inject it into the compose file.
   // Also: handle reuse_volumes — if an existing container with the same name
@@ -501,6 +494,7 @@ async function rebuildProject(project) {
     rebuildLog = readDeployLog(project.id);
     await gitService.cloneRepo(project.git_url, project.id, project.git_branch, project.git_token);
     resetDeployLog(project.id, rebuildLog);
+    project = projectEnvService.initializeRebuiltProjectEnv(project);
     localCommit = await gitService.getRepoCommit(project.id);
     remoteCommit = localCommit;
     appendDeployLog(project.id, `[rebuild] Repository recloned at ${localCommit || '(unknown)'}\n\n`);

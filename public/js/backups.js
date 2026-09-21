@@ -142,6 +142,7 @@ const Backups = {
           { label: this.t('editPlan', '编辑计划'), icon: '✎', onclick: `Backups.showPlanFormById(${plan.id})` },
           { label: this.t('deletePlan', '删除计划'), icon: '×', danger: true, onclick: `Backups.removePlan(${plan.id})` }
         ]);
+        const runNow = this.t('runNow', '立刻执行');
         return `<tr>
           <td><strong>${App.escapeHtml(plan.name)}</strong>${plan.pause_project ? `<div class="table-subtext">${this.t('pauseDuringBackup', '备份时暂停项目')}</div>` : `<div class="table-subtext warning-text">${this.t('liveSnapshot', '不停机快照')}</div>`}<div class="table-subtext">${this.t('localArchiveRetention', '本地归档保留 {count} 批（不影响项目数据）', { count: plan.retention_count ?? 3 })}</div></td>
           <td>${App.escapeHtml(plan.project_name)}</td>
@@ -149,7 +150,7 @@ const Backups = {
           <td><div class="chip-stack">${range}</div></td>
           <td>${schedule}</td>
           <td>${this.statusBadge(plan.last_status || 'idle')}</td>
-          <td class="action-cell">${menu}</td>
+          <td class="action-cell"><div class="backup-plan-actions"><button type="button" class="backup-run-now" title="${App.escapeHtml(runNow)}" onclick="Backups.runPlan(${plan.id})"><span>▶</span><span>${App.escapeHtml(runNow)}</span></button>${menu}</div></td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;

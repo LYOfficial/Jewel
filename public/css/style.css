@@ -1408,6 +1408,10 @@ tbody tr:last-child td { border-bottom: 0; }
 .error-text { color: #ff8383; }
 .warning-text { color: var(--warning); }
 .action-cell { width: 42px; text-align: right; overflow: visible; }
+.backup-plan-actions { display: inline-flex; align-items: center; gap: 4px; }
+.backup-run-now { height: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border: 1px solid var(--accent); border-radius: 7px; background: var(--accent); color: var(--accent-contrast); font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.backup-run-now:hover { filter: brightness(1.08); }
+.backup-run-now span:first-child { font-family: 'SF Mono', Consolas, monospace; }
 
 .badge { border: 1px solid rgba(255,255,255,.055); }
 .badge-backing-up { background: rgba(115,167,255,.14); color: #9abfff; }

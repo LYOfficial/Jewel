@@ -91,6 +91,8 @@ test('failed container recovery remains active and succeeds on a later scheduler
 
 test('provider checks perform read-only remote probes with injected credentials', { skip: !hasSqlite }, async () => {
   const calls = [];
+  const r2AccessKey = 'A'.repeat(32);
+  const r2SecretKey = 'S'.repeat(64);
   const runner = async (binary, args, options) => {
     calls.push({ binary, args, options });
     return { stdout: '', stderr: '' };
@@ -100,9 +102,16 @@ test('provider checks perform read-only remote probes with injected credentials'
     type: 'r2',
     config_json: JSON.stringify({
       endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'jewel-backups',
-      access_key_id: 'access-id', secret_access_key: 'secret-key'
+      access_key_id: r2AccessKey, secret_access_key: r2SecretKey
     })
   }, runner);
+  await assert.rejects(() => backupService.testProvider({
+    type: 'r2',
+    config_json: JSON.stringify({
+      endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'jewel-backups',
+      access_key_id: r2SecretKey, secret_access_key: r2AccessKey
+    })
+  }, runner), /may be entered in the wrong fields/);
   await backupService.testProvider({
     type: 'onedrive',
     config_json: JSON.stringify({ remote_name: 'jewel-drive', token: '{"access_token":"token"}' })
@@ -117,7 +126,8 @@ test('provider checks perform read-only remote probes with injected credentials'
   }, runner);
 
   assert.deepEqual(calls[0].args, ['lsf', 'jewelr2:jewel-backups', '--max-depth', '1']);
-  assert.equal(calls[0].options.env.RCLONE_CONFIG_JEWELR2_SECRET_ACCESS_KEY, 'secret-key');
+  assert.equal(calls[0].options.env.RCLONE_CONFIG_JEWELR2_ACCESS_KEY_ID, r2AccessKey);
+  assert.equal(calls[0].options.env.RCLONE_CONFIG_JEWELR2_SECRET_ACCESS_KEY, r2SecretKey);
   assert.deepEqual(calls[1].args, ['lsf', 'jewel-drive:', '--max-depth', '1']);
   assert.equal(calls[1].options.env.RCLONE_CONFIG_JEWEL_DRIVE_TOKEN, '{"access_token":"token"}');
   assert.deepEqual(calls[2].args, ['--config-dir', '/data/provider-config/baidu', 'info']);
@@ -172,7 +182,7 @@ test('cloud upload adapters build provider-specific destinations and keep rclone
   assert.equal(calls[3].args.includes('--path'), true);
 });
 
-test('backup staging archives remain available locally', { skip: !hasSqlite }, () => {
+test('local archive retention clears only surplus staging archives', { skip: !hasSqlite }, () => {
   const project = db.prepare(`INSERT INTO projects (name, git_url) VALUES (?, ?)`)
     .run(`retention-${Date.now()}`, 'https://example.invalid/retention.git');
   const provider = db.prepare(`INSERT INTO backup_providers (name, type, config_json) VALUES (?, 'local', ?)`)
@@ -201,8 +211,24 @@ test('backup staging archives remain available locally', { skip: !hasSqlite }, (
 
   const older = JSON.parse(db.prepare('SELECT archives FROM backup_tasks WHERE id=?').get(taskIds[0]).archives)[0];
   const newest = JSON.parse(db.prepare('SELECT archives FROM backup_tasks WHERE id=?').get(taskIds[1]).archives)[0];
-  assert.equal(fs.existsSync(older.local_path), true);
+  const projectDataPath = path.join(dataDir, `project-volume-data-${Date.now()}.txt`);
+  fs.writeFileSync(projectDataPath, 'project data must remain');
+  const olderArchives = [older, { name: 'project-data.txt', local_path: projectDataPath, size: 24 }];
+  db.prepare('UPDATE backup_tasks SET archives=? WHERE id=?').run(JSON.stringify(olderArchives), taskIds[0]);
+
+  const removed = backupService.prunePlanTaskArchives(Number(plan.lastInsertRowid), 1);
+  const retainedTask = JSON.parse(db.prepare('SELECT archives FROM backup_tasks WHERE id=?').get(taskIds[1]).archives)[0];
+  const removedArchives = JSON.parse(db.prepare('SELECT archives FROM backup_tasks WHERE id=?').get(taskIds[0]).archives);
+  const removedTask = removedArchives[0];
+
+  assert.equal(removed, 1);
+  assert.equal(fs.existsSync(older.local_path), false);
+  assert.equal(removedTask.local_path, '');
+  assert.equal(removedTask.local_available, false);
   assert.equal(fs.existsSync(newest.local_path), true);
+  assert.equal(retainedTask.local_path, newest.local_path);
+  assert.equal(fs.existsSync(projectDataPath), true);
+  assert.equal(removedArchives[1].local_path, projectDataPath);
 });
 
 test('daily schedules use the configured Jewel timezone', { skip: !hasSqlite }, () => {
@@ -326,6 +352,24 @@ test('runs the complete pause, archive, local upload, and resume lifecycle', { s
   assert.equal(task.archives[0].remote.includes(`${path.sep}provider-root${path.sep}daily${path.sep}`), true);
   assert.equal(db.prepare('SELECT status FROM projects WHERE id=?').get(fixture.projectId).status, 'running');
   assert.equal(db.prepare('SELECT status FROM operation_logs WHERE id=?').get(task.operation_id).status, 'succeeded');
+});
+
+test('manual backup preserves the next scheduled run', { skip: !hasSqlite }, async () => {
+  const fixture = insertRunnableBackup('manual-schedule');
+  const nextRunAt = '2030-01-02T03:00:00.000Z';
+  db.prepare(`
+    UPDATE backup_plans SET schedule_enabled=1, schedule_time='03:00', next_run_at=? WHERE id=?
+  `).run(nextRunAt, fixture.planId);
+  const fake = installFakeDocker({ volumeName: fixture.volumeName });
+  try {
+    await backupService.runTask(fixture.taskId);
+  } finally {
+    fake.restore();
+  }
+
+  const plan = db.prepare('SELECT last_run_at, next_run_at FROM backup_plans WHERE id=?').get(fixture.planId);
+  assert.ok(plan.last_run_at);
+  assert.equal(plan.next_run_at, nextRunAt);
 });
 
 test('archive failure resumes paused containers and records a failed operation', { skip: !hasSqlite }, async () => {

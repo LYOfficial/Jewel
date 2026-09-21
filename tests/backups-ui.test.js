@@ -15,7 +15,8 @@ test('backup plan text fields and daily schedule time use styled input types', (
   assert.match(source, /<input id="backupPlanRemotePath" type="text"/);
   assert.match(source, /<input type="text" class="volume-path-input"/);
   assert.match(source, /<input type="time" id="backupScheduleTime"/);
-  assert.doesNotMatch(source, /backupRetentionCount|backupIntervalHours/);
+  assert.match(source, /backupRetentionCount/);
+  assert.match(source, /不会删除项目容器或挂载卷数据/);
   assert.match(css, /input\[type="time"\]/);
 });
 
@@ -24,4 +25,5 @@ test('R2 form identifies the S3 API endpoint and retains required API credential
   assert.match(source, /this\.t\('r2AccessKeyId', 'Access Key ID'\)/);
   assert.match(source, /this\.t\('r2SecretAccessKey', 'Secret Access Key'\)/);
   assert.match(source, /管理 R2 API Token/);
+  assert.match(source, /Access Key ID 为 32 位，Secret Access Key 为 64 位/);
 });

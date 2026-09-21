@@ -57,10 +57,18 @@ test('normalizes remote paths and keeps local backups inside their configured ro
 
 test('validates provider-specific fields', () => {
   assert.doesNotThrow(() => validateProvider('local', { directory: '/tmp/backups' }));
+  assert.doesNotThrow(() => validateProvider('r2', {
+    endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'demo',
+    access_key_id: 'A'.repeat(32), secret_access_key: 'S'.repeat(64)
+  }));
   assert.throws(() => validateProvider('r2', { bucket: 'demo' }), /endpoint/);
   assert.throws(
     () => validateProvider('r2', { endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'demo' }),
     /access_key_id, secret_access_key/
   );
+  assert.throws(() => validateProvider('r2', {
+    endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'demo',
+    access_key_id: 'A'.repeat(64), secret_access_key: 'S'.repeat(32)
+  }), /may be entered in the wrong fields/);
   assert.throws(() => validateProvider('unknown', {}), /Unsupported/);
 });

@@ -22,7 +22,7 @@ test('creates operation and backup schema on a fresh data directory', { skip: !h
     assert.equal(taskColumns.has('previous_project_status'), true);
     const planColumns = new Set(db.prepare('PRAGMA table_info(backup_plans)').all().map(row => row.name));
     assert.equal(planColumns.has('schedule_time'), true);
-    assert.equal(planColumns.has('retention_count'), false);
+    assert.equal(planColumns.has('retention_count'), true);
     assert.equal(planColumns.has('interval_hours'), false);
     const operationColumns = new Set(db.prepare('PRAGMA table_info(operation_logs)').all().map(row => row.name));
     assert.equal(operationColumns.has('commit_hash'), true);

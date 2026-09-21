@@ -16,7 +16,7 @@ const Backups = {
         <div id="backupOverview" class="stats-grid"></div>
         <section class="section-card">
           <div class="section-card-header">
-            <div><h3>${this.t('plans', '备份计划')}</h3><p>${this.t('plansDescription', '手动执行，或按小时周期自动执行。')}</p></div>
+            <div><h3>${this.t('plans', '备份计划')}</h3><p>${this.t('plansDescription', '手动执行，或每天按指定时间自动运行。')}</p></div>
             <details class="action-menu page-action-menu">
               <summary>${this.t('new', '新建')} <span>⌄</span></summary>
               <div class="action-menu-popover">
@@ -138,12 +138,12 @@ const Backups = {
           ? `${this.t('dailyAt', '每天 {time}', { time: plan.schedule_time || '03:00' })}<div class="table-subtext">${plan.next_run_at ? this.formatDate(plan.next_run_at) : this.t('waitingSchedule', '等待调度')}</div>`
           : this.t('manualOnly', '仅手动');
         const menu = App.actionMenu([
-          { label: this.t('runNow', '立即备份'), icon: '▶', onclick: `Backups.runPlan(${plan.id})` },
+          { label: this.t('runNow', '立刻执行'), icon: '▶', onclick: `Backups.runPlan(${plan.id})` },
           { label: this.t('editPlan', '编辑计划'), icon: '✎', onclick: `Backups.showPlanFormById(${plan.id})` },
           { label: this.t('deletePlan', '删除计划'), icon: '×', danger: true, onclick: `Backups.removePlan(${plan.id})` }
         ]);
         return `<tr>
-          <td><strong>${App.escapeHtml(plan.name)}</strong>${plan.pause_project ? `<div class="table-subtext">${this.t('pauseDuringBackup', '备份时暂停项目')}</div>` : `<div class="table-subtext warning-text">${this.t('liveSnapshot', '不停机快照')}</div>`}</td>
+          <td><strong>${App.escapeHtml(plan.name)}</strong>${plan.pause_project ? `<div class="table-subtext">${this.t('pauseDuringBackup', '备份时暂停项目')}</div>` : `<div class="table-subtext warning-text">${this.t('liveSnapshot', '不停机快照')}</div>`}<div class="table-subtext">${this.t('localArchiveRetention', '本地归档保留 {count} 批（不影响项目数据）', { count: plan.retention_count ?? 3 })}</div></td>
           <td>${App.escapeHtml(plan.project_name)}</td>
           <td><span class="provider-pill">${this.providerLabel(plan.provider_type)}</span><div class="table-subtext">${App.escapeHtml(plan.provider_name)}</div></td>
           <td><div class="chip-stack">${range}</div></td>
@@ -222,7 +222,7 @@ const Backups = {
       note.textContent = this.t('localNote', '适合先验证任务流程，或将归档写入已挂载的 NAS 目录。');
       el.innerHTML = input(this.t('directory', '目录'), 'directory', '/data/backups/export') + input(this.t('basePathOptional', '基础路径（可选）'), 'base_path', 'jewel');
     } else if (type === 'r2') {
-      note.textContent = this.t('r2Note', 'S3 API Endpoint 已包含账户 ID。还需在 Cloudflare 的「管理 R2 API Token」中创建具备对象读写权限的令牌，并填写生成的 Access Key ID 和 Secret Access Key。');
+      note.textContent = this.t('r2Note', 'S3 API Endpoint 已包含账户 ID。还需在 Cloudflare 的「管理 R2 API Token」中创建具备对象读写权限的令牌，并填写生成的 Access Key ID 和 Secret Access Key。Access Key ID 为 32 位，Secret Access Key 为 64 位，二者不要填反。');
       el.innerHTML = `<div class="form-row">${input(this.t('r2Endpoint', 'S3 API Endpoint'), 'endpoint', 'https://ACCOUNT.r2.cloudflarestorage.com')}${input(this.t('r2Bucket', 'Bucket 名称'), 'bucket', 'jewel-backups')}</div>
         <div class="form-row">${input(this.t('r2AccessKeyId', 'Access Key ID'), 'access_key_id', '', true)}${input(this.t('r2SecretAccessKey', 'Secret Access Key'), 'secret_access_key', '', true)}</div>
         ${input(this.t('basePathOptional', '基础路径（可选）'), 'base_path', 'backups')}`;
@@ -293,6 +293,7 @@ const Backups = {
         <label class="option-card"><input type="checkbox" id="backupPauseProject" ${plan?.pause_project === 0 ? '' : 'checked'}><span><strong>${this.t('consistentPause', '一致性暂停')}</strong><small>${this.t('consistentPauseHint', '打包前暂停项目容器，上传后自动恢复。')}</small></span></label>
         <label class="option-card"><input type="checkbox" id="backupScheduleEnabled" ${plan?.schedule_enabled ? 'checked' : ''}><span><strong>${this.t('automaticBackup', '自动备份')}</strong><small>${this.t('automaticBackupHint', '每天在平台时区的指定时间运行。')}</small></span></label>
       </div>
+      <div class="form-group"><label>${this.t('localArchiveRetentionCount', '本地备份归档保留批次')}</label><input type="number" min="0" max="100" id="backupRetentionCount" value="${plan?.retention_count ?? 3}"><small class="form-hint">${this.t('localArchiveRetentionHint', '仅清理 Jewel 生成的本地备份归档，不会删除项目容器或挂载卷数据；填 0 会清理所有已上传归档。')}</small></div>
       <div class="form-group" id="backupScheduleTimeGroup" style="display:${plan?.schedule_enabled ? 'block' : 'none'}"><label>${this.t('dailyRunTime', '每日执行时间')}</label><input type="time" id="backupScheduleTime" value="${App.escapeHtml(plan?.schedule_time || '03:00')}" step="60"><small class="form-hint">${this.t('dailyRunTimeHint', '以“设置 → 时区”的平台时区为准。')}</small></div>`;
     Modal.show(plan ? this.t('editBackupPlan', '编辑备份计划') : this.t('newBackupPlan', '新建备份计划'), content, [
       { label: this.t('cancel', '取消'), class: 'btn-secondary' },
@@ -343,6 +344,7 @@ const Backups = {
       remote_path: document.getElementById('backupPlanRemotePath').value.trim(),
       volume_selections: selections,
       pause_project: document.getElementById('backupPauseProject').checked,
+      retention_count: Math.max(0, Math.min(Number(document.getElementById('backupRetentionCount').value) || 0, 100)),
       schedule_enabled: document.getElementById('backupScheduleEnabled').checked,
       schedule_time: document.getElementById('backupScheduleTime').value || '03:00'
     };
@@ -360,7 +362,7 @@ const Backups = {
   async runPlan(id) {
     const ok = await Modal.confirm({
       title: this.t('runBackupNow', '立即执行备份'),
-      body: this.t('runBackupHint', '任务会按计划暂停项目容器、打包所选卷并上传，完成或失败后都会尝试恢复容器。'),
+      body: this.t('runBackupHint', '任务会按计划暂停项目容器、打包所选卷并上传，完成或失败后都会尝试恢复容器；不会改变下一次定时执行时间。'),
       okLabel: this.t('startBackup', '开始备份')
     });
     if (!ok) return;

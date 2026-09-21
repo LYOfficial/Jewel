@@ -145,6 +145,13 @@ function validateProvider(type, config) {
   if (type === 'local' && !path.isAbsolute(String(config.directory))) {
     throw new Error('Local backup directory must be an absolute path');
   }
+  if (type === 'r2') {
+    const accessKeyLength = String(config.access_key_id).trim().length;
+    const secretKeyLength = String(config.secret_access_key).trim().length;
+    if (accessKeyLength !== 32 || secretKeyLength !== 64) {
+      throw new Error('Cloudflare R2 credentials are invalid: Access Key ID must be 32 characters and Secret Access Key must be 64 characters; they may be entered in the wrong fields');
+    }
+  }
   normalizeRemotePath(config && config.base_path);
 }
 

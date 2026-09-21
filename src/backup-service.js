@@ -16,7 +16,8 @@ const {
   safeSegment,
   normalizeRemotePath,
   buildRemotePath,
-  resolveLocalDestination
+  resolveLocalDestination,
+  validateProvider
 } = require('./backup-utils');
 
 const HELPER_IMAGE = process.env.BACKUP_HELPER_IMAGE || 'busybox:1.36';
@@ -112,6 +113,73 @@ function isMissingContainerError(err) {
     err.status === 404 ||
     /no such container|container .* not found/i.test(err.message || '')
   ));
+}
+
+function isPathInside(root, target) {
+  const relative = path.relative(path.resolve(root), path.resolve(target));
+  return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+function removeEmptyParentDirectories(startDirectory, stopDirectory) {
+  let current = path.resolve(startDirectory);
+  const stop = path.resolve(stopDirectory);
+  while (current !== stop && isPathInside(stop, current)) {
+    try {
+      fs.rmdirSync(current);
+    } catch {
+      break;
+    }
+    current = path.dirname(current);
+  }
+}
+
+function clearTaskLocalArchives(task) {
+  const backupRoot = getBackupRoot();
+  const parsedArchives = parseJson(task.archives, []);
+  const archives = Array.isArray(parsedArchives) ? parsedArchives : [];
+  let removed = 0;
+  const parentDirectories = new Set();
+  const updated = archives.map(archive => {
+    const localPath = archive && archive.local_path ? path.resolve(archive.local_path) : '';
+    if (!localPath || !isPathInside(backupRoot, localPath)) return archive;
+    try {
+      if (fs.statSync(localPath).isFile()) {
+        fs.unlinkSync(localPath);
+        removed += 1;
+        parentDirectories.add(path.dirname(localPath));
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+    }
+    return {
+      ...archive,
+      local_path: '',
+      local_available: false,
+      local_deleted_at: new Date().toISOString()
+    };
+  });
+  for (const directory of parentDirectories) removeEmptyParentDirectories(directory, backupRoot);
+  db.prepare('UPDATE backup_tasks SET archives=? WHERE id=?').run(JSON.stringify(updated), task.id);
+  if (removed) appendTaskLog(task.id, `Removed ${removed} local staging archive(s) according to the retention policy`);
+  return removed;
+}
+
+function prunePlanTaskArchives(planId, retentionCount) {
+  const keep = Math.max(0, Math.min(Number(retentionCount) || 0, 100));
+  const tasks = db.prepare(`
+    SELECT id, archives FROM backup_tasks
+    WHERE plan_id=? AND status='succeeded'
+    ORDER BY id DESC
+  `).all(planId);
+  let removed = 0;
+  for (const task of tasks.slice(keep)) removed += clearTaskLocalArchives(task);
+  return removed;
+}
+
+function nextRunAfterTask(plan, task, completedAt) {
+  if (!plan.schedule_enabled) return null;
+  if (task.trigger_type === 'manual' && plan.next_run_at) return plan.next_run_at;
+  return getPlanNextRun(plan, new Date(completedAt));
 }
 
 async function getProjectVolumeResources(project, discoveredContainers = null, discoveredVolumes = null) {
@@ -463,12 +531,17 @@ async function runTask(taskId) {
       UPDATE backup_tasks SET status='succeeded', phase='completed', archives=?, bytes_total=?, completed_at=? WHERE id=?
     `).run(JSON.stringify(archives), archives.reduce((sum, item) => sum + item.size, 0), completedAt, taskId);
     db.prepare('UPDATE backup_plans SET last_run_at=?, next_run_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
-      .run(completedAt, plan.schedule_enabled ? getPlanNextRun(plan, new Date(completedAt)) : null, plan.id);
+      .run(completedAt, nextRunAfterTask(plan, task, completedAt), plan.id);
     appendTaskLog(taskId, `Backup completed with ${archives.length} archive(s)`);
     operations.succeed(opId, {
       summary: `Backed up ${archives.length} archive(s) to ${provider.name}`,
       detail: archives.map(a => `${a.volume}:${a.source_path} -> ${a.remote}`).join('\n')
     });
+    try {
+      prunePlanTaskArchives(plan.id, plan.retention_count);
+    } catch (err) {
+      appendTaskLog(taskId, `Warning: failed to apply local archive retention: ${err.message}`);
+    }
   } catch (err) {
     const persistedIds = readPausedContainerIds(taskId);
     pausedIds = await resumeProjectContainers(taskId, persistedIds.length ? persistedIds : pausedIds);
@@ -476,7 +549,7 @@ async function runTask(taskId) {
     appendTaskLog(taskId, `Backup failed: ${err.message}`);
     const taskLog = db.prepare('SELECT log FROM backup_tasks WHERE id = ?').get(taskId)?.log || '';
     db.prepare('UPDATE backup_plans SET last_run_at=?, next_run_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
-      .run(completedAt, plan.schedule_enabled ? getPlanNextRun(plan, new Date(completedAt)) : null, plan.id);
+      .run(completedAt, nextRunAfterTask(plan, task, completedAt), plan.id);
     if (pausedIds.length) {
       db.prepare('UPDATE projects SET status = ? WHERE id = ?').run('backup-recovery', project.id);
       appendTaskLog(taskId, `Recovery pending for ${pausedIds.length} container(s); Jewel will retry automatically`);
@@ -541,6 +614,7 @@ function listTasks(limit = 50) {
 
 async function testProvider(provider, commandRunner = runCommand) {
   const providerConfig = parseJson(provider.config_json, {});
+  validateProvider(provider.type, providerConfig);
   if (provider.type === 'local') {
     fs.mkdirSync(providerConfig.directory, { recursive: true });
     await fs.promises.access(providerConfig.directory, fs.constants.W_OK);
@@ -670,6 +744,7 @@ module.exports = {
   uploadArchive,
   testProvider,
   recoverInterruptedTasks,
+  prunePlanTaskArchives,
   getPlatformTimezone,
   rescheduleScheduledPlans,
   runDuePlans,

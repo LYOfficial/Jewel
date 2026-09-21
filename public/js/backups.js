@@ -186,7 +186,7 @@ const Backups = {
   showProviderForm(provider = null) {
     const content = `
       <div class="form-row">
-        <div class="form-group"><label>${this.t('name', '名称')}</label><input id="backupProviderName" value="${App.escapeHtml(provider?.name || '')}" placeholder="${this.t('providerNamePlaceholder', '生产备份存储')}"></div>
+        <div class="form-group"><label>${this.t('name', '名称')}</label><input id="backupProviderName" type="text" value="${App.escapeHtml(provider?.name || '')}" placeholder="${this.t('providerNamePlaceholder', '生产备份存储')}"></div>
         <div class="form-group"><label>${this.t('type', '类型')}</label>
           <select id="backupProviderType">
             ${['local', 'r2', 'onedrive', 'baidu', 'anyshare'].map(type => `<option value="${type}" ${provider?.type === type ? 'selected' : ''}>${this.providerLabel(type)}</option>`).join('')}
@@ -222,9 +222,9 @@ const Backups = {
       note.textContent = this.t('localNote', '适合先验证任务流程，或将归档写入已挂载的 NAS 目录。');
       el.innerHTML = input(this.t('directory', '目录'), 'directory', '/data/backups/export') + input(this.t('basePathOptional', '基础路径（可选）'), 'base_path', 'jewel');
     } else if (type === 'r2') {
-      note.textContent = this.t('r2Note', '使用 rclone 的 S3 兼容模式连接 Cloudflare R2。');
-      el.innerHTML = `<div class="form-row">${input('R2 Endpoint', 'endpoint', 'https://ACCOUNT.r2.cloudflarestorage.com')}${input('Bucket', 'bucket', 'jewel-backups')}</div>
-        <div class="form-row">${input('Access Key ID', 'access_key_id', '', true)}${input('Secret Access Key', 'secret_access_key', '', true)}</div>
+      note.textContent = this.t('r2Note', 'S3 API Endpoint 已包含账户 ID。还需在 Cloudflare 的「管理 R2 API Token」中创建具备对象读写权限的令牌，并填写生成的 Access Key ID 和 Secret Access Key。');
+      el.innerHTML = `<div class="form-row">${input(this.t('r2Endpoint', 'S3 API Endpoint'), 'endpoint', 'https://ACCOUNT.r2.cloudflarestorage.com')}${input(this.t('r2Bucket', 'Bucket 名称'), 'bucket', 'jewel-backups')}</div>
+        <div class="form-row">${input(this.t('r2AccessKeyId', 'Access Key ID'), 'access_key_id', '', true)}${input(this.t('r2SecretAccessKey', 'Secret Access Key'), 'secret_access_key', '', true)}</div>
         ${input(this.t('basePathOptional', '基础路径（可选）'), 'base_path', 'backups')}`;
     } else if (type === 'onedrive') {
       note.textContent = this.t('oneDriveNote', '可填写现有 rclone remote 名称；如需由 Jewel 注入认证，请同时提供 token JSON。');

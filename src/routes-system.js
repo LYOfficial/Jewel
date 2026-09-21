@@ -5,6 +5,7 @@ const { authMiddleware } = require('./auth');
 const updateService = require('./update-service');
 const dockerService = require('./docker-service');
 const projectMetricsAuth = require('./project-metrics-auth-service');
+const backupService = require('./backup-service');
 
 const router = express.Router();
 
@@ -300,6 +301,7 @@ router.put('/settings', (req, res) => {
     if (key === 'mcp_access_key' || key === 'project_metrics_access_key') continue;
     upsert.run(key, String(value));
   }
+  if (Object.hasOwn(req.body, 'timezone')) backupService.rescheduleScheduledPlans();
   const settings = db.prepare("SELECT * FROM settings WHERE key NOT IN ('mcp_access_key', 'project_metrics_access_key')").all();
   const obj = {};
   for (const s of settings) obj[s.key] = s.value;

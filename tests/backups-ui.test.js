@@ -4,9 +4,19 @@ const fs = require('fs');
 const path = require('path');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'backups.js'), 'utf8');
+const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'style.css'), 'utf8');
 
 test('storage target name uses the shared text input style', () => {
   assert.match(source, /<input id="backupProviderName" type="text"/);
+});
+
+test('backup plan text fields and daily schedule time use styled input types', () => {
+  assert.match(source, /<input id="backupPlanName" type="text"/);
+  assert.match(source, /<input id="backupPlanRemotePath" type="text"/);
+  assert.match(source, /<input type="text" class="volume-path-input"/);
+  assert.match(source, /<input type="time" id="backupScheduleTime"/);
+  assert.doesNotMatch(source, /backupRetentionCount|backupIntervalHours/);
+  assert.match(css, /input\[type="time"\]/);
 });
 
 test('R2 form identifies the S3 API endpoint and retains required API credentials', () => {

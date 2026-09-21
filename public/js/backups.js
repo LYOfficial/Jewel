@@ -135,7 +135,7 @@ const Backups = {
           return `<span class="resource-chip" title="${App.escapeHtml(paths)}">${App.escapeHtml(item.name)} · ${App.escapeHtml(paths)}</span>`;
         }).join('');
         const schedule = plan.schedule_enabled
-          ? `${this.t('everyHours', '每 {hours} 小时', { hours: plan.interval_hours })}<div class="table-subtext">${plan.next_run_at ? this.formatDate(plan.next_run_at) : this.t('waitingSchedule', '等待调度')}</div>`
+          ? `${this.t('dailyAt', '每天 {time}', { time: plan.schedule_time || '03:00' })}<div class="table-subtext">${plan.next_run_at ? this.formatDate(plan.next_run_at) : this.t('waitingSchedule', '等待调度')}</div>`
           : this.t('manualOnly', '仅手动');
         const menu = App.actionMenu([
           { label: this.t('runNow', '立即备份'), icon: '▶', onclick: `Backups.runPlan(${plan.id})` },
@@ -143,7 +143,7 @@ const Backups = {
           { label: this.t('deletePlan', '删除计划'), icon: '×', danger: true, onclick: `Backups.removePlan(${plan.id})` }
         ]);
         return `<tr>
-          <td><strong>${App.escapeHtml(plan.name)}</strong>${plan.pause_project ? `<div class="table-subtext">${this.t('pauseDuringBackup', '备份时暂停项目')}</div>` : `<div class="table-subtext warning-text">${this.t('liveSnapshot', '不停机快照')}</div>`}<div class="table-subtext">${this.t('retentionBatches', '本地缓存保留 {count} 批', { count: plan.retention_count ?? 3 })}</div></td>
+          <td><strong>${App.escapeHtml(plan.name)}</strong>${plan.pause_project ? `<div class="table-subtext">${this.t('pauseDuringBackup', '备份时暂停项目')}</div>` : `<div class="table-subtext warning-text">${this.t('liveSnapshot', '不停机快照')}</div>`}</td>
           <td>${App.escapeHtml(plan.project_name)}</td>
           <td><span class="provider-pill">${this.providerLabel(plan.provider_type)}</span><div class="table-subtext">${App.escapeHtml(plan.provider_name)}</div></td>
           <td><div class="chip-stack">${range}</div></td>
@@ -281,20 +281,19 @@ const Backups = {
     const projectId = plan?.project_id || this.data.projects[0].id;
     const content = `
       <div class="form-row">
-        <div class="form-group"><label>${this.t('planName', '计划名称')}</label><input id="backupPlanName" value="${App.escapeHtml(plan?.name || '')}" placeholder="${this.t('planNamePlaceholder', '每日数据备份')}"></div>
+        <div class="form-group"><label>${this.t('planName', '计划名称')}</label><input id="backupPlanName" type="text" value="${App.escapeHtml(plan?.name || '')}" placeholder="${this.t('planNamePlaceholder', '每日数据备份')}"></div>
         <div class="form-group"><label>${this.t('project', '项目')}</label><select id="backupPlanProject">${this.data.projects.map(project => `<option value="${project.id}" ${project.id === projectId ? 'selected' : ''}>${App.escapeHtml(project.name)}</option>`).join('')}</select></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>${this.t('provider', '存储目标')}</label><select id="backupPlanProvider">${this.data.providers.map(provider => `<option value="${provider.id}" ${provider.id === plan?.provider_id ? 'selected' : ''}>${App.escapeHtml(provider.name)} · ${this.providerLabel(provider.type)}</option>`).join('')}</select></div>
-        <div class="form-group"><label>${this.t('remoteSubdirectoryOptional', '远端子目录（可选）')}</label><input id="backupPlanRemotePath" value="${App.escapeHtml(plan?.remote_path || '')}" placeholder="production/database"></div>
+        <div class="form-group"><label>${this.t('remoteSubdirectoryOptional', '远端子目录（可选）')}</label><input id="backupPlanRemotePath" type="text" value="${App.escapeHtml(plan?.remote_path || '')}" placeholder="production/database"></div>
       </div>
       <div class="form-group"><label>${this.t('volumesAndPaths', '挂载卷与备份路径')}</label><div id="backupPlanVolumes" class="volume-picker"><div class="loading-inline">${this.t('discoveringVolumes', '正在发现项目挂载卷…')}</div></div></div>
       <div class="backup-options-grid">
         <label class="option-card"><input type="checkbox" id="backupPauseProject" ${plan?.pause_project === 0 ? '' : 'checked'}><span><strong>${this.t('consistentPause', '一致性暂停')}</strong><small>${this.t('consistentPauseHint', '打包前暂停项目容器，上传后自动恢复。')}</small></span></label>
-        <label class="option-card"><input type="checkbox" id="backupScheduleEnabled" ${plan?.schedule_enabled ? 'checked' : ''}><span><strong>${this.t('automaticBackup', '自动备份')}</strong><small>${this.t('automaticBackupHint', '按固定小时周期运行。')}</small></span></label>
+        <label class="option-card"><input type="checkbox" id="backupScheduleEnabled" ${plan?.schedule_enabled ? 'checked' : ''}><span><strong>${this.t('automaticBackup', '自动备份')}</strong><small>${this.t('automaticBackupHint', '每天在平台时区的指定时间运行。')}</small></span></label>
       </div>
-      <div class="form-group"><label>${this.t('retentionCount', '本地缓存保留批次')}</label><input type="number" min="0" max="100" id="backupRetentionCount" value="${plan?.retention_count ?? 3}"><small class="form-hint">${this.t('retentionHint', '上传完成后只保留最近批次的本地暂存归档；填 0 可在上传后立即清理。')}</small></div>
-      <div class="form-group" id="backupIntervalGroup" style="display:${plan?.schedule_enabled ? 'block' : 'none'}"><label>${this.t('intervalHours', '执行间隔（小时）')}</label><input type="number" min="1" max="8760" id="backupIntervalHours" value="${plan?.interval_hours || 24}"></div>`;
+      <div class="form-group" id="backupScheduleTimeGroup" style="display:${plan?.schedule_enabled ? 'block' : 'none'}"><label>${this.t('dailyRunTime', '每日执行时间')}</label><input type="time" id="backupScheduleTime" value="${App.escapeHtml(plan?.schedule_time || '03:00')}" step="60"><small class="form-hint">${this.t('dailyRunTimeHint', '以“设置 → 时区”的平台时区为准。')}</small></div>`;
     Modal.show(plan ? this.t('editBackupPlan', '编辑备份计划') : this.t('newBackupPlan', '新建备份计划'), content, [
       { label: this.t('cancel', '取消'), class: 'btn-secondary' },
       { label: plan ? this.t('save', '保存') : this.t('create', '创建'), class: 'btn-primary', onClick: () => this.savePlan(plan?.id) }
@@ -302,7 +301,7 @@ const Backups = {
     const projectSelect = document.getElementById('backupPlanProject');
     projectSelect.addEventListener('change', () => this.loadPlanVolumes(projectSelect.value, []));
     document.getElementById('backupScheduleEnabled').addEventListener('change', event => {
-      document.getElementById('backupIntervalGroup').style.display = event.target.checked ? 'block' : 'none';
+      document.getElementById('backupScheduleTimeGroup').style.display = event.target.checked ? 'block' : 'none';
     });
     this.loadPlanVolumes(projectId, plan?.volume_selections || []);
   },
@@ -322,7 +321,7 @@ const Backups = {
         return `<label class="volume-option">
           <input type="checkbox" class="backup-volume-select" data-volume="${App.escapeHtml(volume.name)}" ${selectedMap.has(volume.name) ? 'checked' : ''}>
           <span class="volume-option-main"><strong>${App.escapeHtml(volume.name)}</strong><small>${App.escapeHtml(volume.destinations.join(', ') || this.t('unknownMountPoint', '未知挂载点'))} · ${App.escapeHtml(volume.containers.join(', '))}</small></span>
-          <input class="volume-path-input" data-volume-path="${App.escapeHtml(volume.name)}" value="${App.escapeHtml(paths.join(', '))}" placeholder="${this.t('volumePathPlaceholder', '/ 或 uploads, data/db')}">
+          <input type="text" class="volume-path-input" data-volume-path="${App.escapeHtml(volume.name)}" value="${App.escapeHtml(paths.join(', '))}" placeholder="${this.t('volumePathPlaceholder', '/ 或 uploads, data/db')}">
         </label>`;
       }).join('');
     } catch (err) {
@@ -344,9 +343,8 @@ const Backups = {
       remote_path: document.getElementById('backupPlanRemotePath').value.trim(),
       volume_selections: selections,
       pause_project: document.getElementById('backupPauseProject').checked,
-      retention_count: Math.max(0, Math.min(Number(document.getElementById('backupRetentionCount').value) || 0, 100)),
       schedule_enabled: document.getElementById('backupScheduleEnabled').checked,
-      interval_hours: Number(document.getElementById('backupIntervalHours').value) || 24
+      schedule_time: document.getElementById('backupScheduleTime').value || '03:00'
     };
     if (!data.name) return Notify.error(this.t('planNameRequired', '请输入计划名称'));
     if (!selections.length) return Notify.error(this.t('selectVolume', '至少选择一个挂载卷'));
@@ -386,7 +384,7 @@ const Backups = {
     try {
       const task = await API.getBackupTask(id);
       const archives = (task.archives || []).map(item => `
-        <div class="archive-row"><span>${App.escapeHtml(item.volume)}:${App.escapeHtml(item.source_path)}</span><strong>${this.formatSize(item.size)}</strong><small>${App.escapeHtml(item.remote || item.name)}${item.local_available === false ? ` · ${this.t('localCacheCleared', '本地缓存已清理')}` : ''}</small></div>`).join('');
+        <div class="archive-row"><span>${App.escapeHtml(item.volume)}:${App.escapeHtml(item.source_path)}</span><strong>${this.formatSize(item.size)}</strong><small>${App.escapeHtml(item.remote || item.name)}</small></div>`).join('');
       Modal.show(this.t('taskNumber', '备份任务 #{id}', { id: task.id }), `
         <div class="task-detail-grid">
           <div><span>${this.t('project', '项目')}</span><strong>${App.escapeHtml(task.project_name || '-')}</strong></div>
@@ -449,7 +447,12 @@ const Backups = {
     if (!value) return '-';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const timeZone = localStorage.getItem('jewel-timezone') || 'Asia/Shanghai';
+    try {
+      return date.toLocaleString([], { timeZone, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return date.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
   },
 
   formatSize(bytes) {

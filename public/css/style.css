@@ -85,6 +85,7 @@ input[type="password"],
 input[type="url"],
 input[type="number"],
 input[type="email"],
+input[type="time"],
 select,
 textarea {
   width: 100%;
@@ -1374,7 +1375,7 @@ body {
 .btn-danger:hover { background: rgba(255, 85, 85, .2); }
 .btn-sm { min-height: 27px; padding: 4px 9px; }
 
-input[type="text"], input[type="password"], input[type="url"], input[type="number"], input[type="email"], select, textarea {
+input[type="text"], input[type="password"], input[type="url"], input[type="number"], input[type="email"], input[type="time"], select, textarea {
   border-color: rgba(255,255,255,.1);
   background: rgba(7,8,10,.74);
   box-shadow: 0 1px 0 rgba(255,255,255,.02) inset;
@@ -1796,7 +1797,7 @@ html[data-theme="light"] .nav-item.active .nav-icon img { opacity: 1; filter: in
 html[data-theme="light"] .btn-danger { color: #d94242; background: #fff2f2; border-color: #ffdada; }
 .btn-sm { min-height: 28px; border-radius: 7px; }
 
-input[type="text"], input[type="password"], input[type="url"], input[type="number"], input[type="email"], select, textarea,
+input[type="text"], input[type="password"], input[type="url"], input[type="number"], input[type="email"], input[type="time"], select, textarea,
 .note-add-input, .note-editor {
   border-color: var(--line);
   background: var(--surface-raised);

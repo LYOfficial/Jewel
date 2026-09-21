@@ -35,10 +35,54 @@ function normalizeVolumeSelections(value) {
   return selections;
 }
 
-function computeNextRun(intervalHours, from = new Date()) {
-  const numeric = Number(intervalHours);
-  const hours = Math.max(1, Math.min(Number.isFinite(numeric) ? numeric : 24, 24 * 365));
-  return new Date(from.getTime() + hours * 60 * 60 * 1000).toISOString();
+function normalizeScheduleTime(value, fallback = '03:00') {
+  const text = String(value == null || value === '' ? fallback : value).trim();
+  const match = /^(\d{2}):(\d{2})$/.exec(text);
+  if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) {
+    throw new Error('Schedule time must use HH:mm between 00:00 and 23:59');
+  }
+  return text;
+}
+
+function getZonedDateParts(date, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts
+    .filter(part => ['year', 'month', 'day', 'hour', 'minute'].includes(part.type))
+    .map(part => [part.type, Number(part.value)]));
+  return values;
+}
+
+function zonedDateTimeToUtc(year, month, day, hour, minute, timeZone) {
+  const intended = Date.UTC(year, month - 1, day, hour, minute);
+  let timestamp = intended;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const actual = getZonedDateParts(new Date(timestamp), timeZone);
+    const adjustment = intended - Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute);
+    if (!adjustment) break;
+    timestamp += adjustment;
+  }
+  return timestamp;
+}
+
+function computeNextRun(scheduleTime, timeZone = 'Asia/Shanghai', from = new Date()) {
+  const [hour, minute] = normalizeScheduleTime(scheduleTime).split(':').map(Number);
+  const now = from instanceof Date ? from : new Date(from);
+  if (Number.isNaN(now.getTime())) throw new Error('Invalid schedule reference time');
+  const local = getZonedDateParts(now, timeZone);
+  let timestamp = zonedDateTimeToUtc(local.year, local.month, local.day, hour, minute, timeZone);
+  if (timestamp <= now.getTime()) {
+    const tomorrow = new Date(Date.UTC(local.year, local.month - 1, local.day + 1));
+    timestamp = zonedDateTimeToUtc(tomorrow.getUTCFullYear(), tomorrow.getUTCMonth() + 1, tomorrow.getUTCDate(), hour, minute, timeZone);
+  }
+  return new Date(timestamp).toISOString();
 }
 
 function safeSegment(value, fallback = 'backup') {
@@ -109,6 +153,7 @@ module.exports = {
   parseJson,
   normalizeRelativePath,
   normalizeVolumeSelections,
+  normalizeScheduleTime,
   computeNextRun,
   safeSegment,
   normalizeRemotePath,

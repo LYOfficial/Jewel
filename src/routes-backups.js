@@ -6,6 +6,7 @@ const operationService = require('./operation-service');
 const {
   parseJson,
   normalizeVolumeSelections,
+  normalizeScheduleTime,
   normalizeRemotePath,
   computeNextRun,
   maskConfig,
@@ -115,8 +116,8 @@ router.get('/plans', (req, res) => {
 router.post('/plans', async (req, res) => {
   try {
     const {
-      project_id, provider_id, name, volume_selections, remote_path = '', pause_project = true, retention_count = 3,
-      schedule_enabled = false, interval_hours = 24, enabled = true
+      project_id, provider_id, name, volume_selections, remote_path = '', pause_project = true,
+      schedule_enabled = false, schedule_time = '03:00', enabled = true
     } = req.body || {};
     const project = db.prepare('SELECT * FROM projects WHERE id=?').get(project_id);
     const provider = db.prepare('SELECT * FROM backup_providers WHERE id=?').get(provider_id);
@@ -125,16 +126,16 @@ router.post('/plans', async (req, res) => {
     const available = new Set((await backupService.getProjectVolumeResources(project)).map(v => v.name));
     const missing = selections.filter(v => !available.has(v.name)).map(v => v.name);
     if (missing.length) return res.status(400).json({ error: `Volumes are not attached to the project: ${missing.join(', ')}` });
-    const nextRunAt = schedule_enabled ? computeNextRun(interval_hours) : null;
+    const scheduleTime = normalizeScheduleTime(schedule_time);
+    const nextRunAt = schedule_enabled ? computeNextRun(scheduleTime, backupService.getPlatformTimezone()) : null;
     const normalizedRemotePath = normalizeRemotePath(remote_path);
     const result = db.prepare(`
       INSERT INTO backup_plans
-      (project_id, provider_id, name, volume_selections, remote_path, pause_project, retention_count, schedule_enabled, interval_hours, next_run_at, enabled)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (project_id, provider_id, name, volume_selections, remote_path, pause_project, schedule_enabled, schedule_time, next_run_at, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       project.id, provider.id, name || `${project.name} backup`, JSON.stringify(selections), normalizedRemotePath,
-      pause_project ? 1 : 0, Math.max(0, Math.min(Number(retention_count) || 0, 100)),
-      schedule_enabled ? 1 : 0, Math.max(1, Number(interval_hours) || 24), nextRunAt, enabled ? 1 : 0
+      pause_project ? 1 : 0, schedule_enabled ? 1 : 0, scheduleTime, nextRunAt, enabled ? 1 : 0
     );
     res.status(201).json(serializePlan(db.prepare('SELECT * FROM backup_plans WHERE id=?').get(result.lastInsertRowid)));
   } catch (err) {
@@ -160,25 +161,20 @@ router.put('/plans/:id', async (req, res) => {
       : new Set();
     const missing = selections.filter(v => !available.has(v.name) && !existingNames.has(v.name)).map(v => v.name);
     if (missing.length) return res.status(400).json({ error: `Volumes are not attached to the project: ${missing.join(', ')}` });
-    const intervalHours = req.body.interval_hours === undefined ? existing.interval_hours : Math.max(1, Number(req.body.interval_hours) || 24);
     const scheduleEnabled = req.body.schedule_enabled === undefined ? existing.schedule_enabled : (req.body.schedule_enabled ? 1 : 0);
-    const nextRunAt = scheduleEnabled
-      ? (existing.next_run_at && req.body.interval_hours === undefined ? existing.next_run_at : computeNextRun(intervalHours))
-      : null;
+    const scheduleTime = normalizeScheduleTime(req.body.schedule_time === undefined ? existing.schedule_time : req.body.schedule_time);
+    const nextRunAt = scheduleEnabled ? computeNextRun(scheduleTime, backupService.getPlatformTimezone()) : null;
     const normalizedRemotePath = req.body.remote_path === undefined
       ? existing.remote_path
       : normalizeRemotePath(req.body.remote_path);
-    const retentionCount = req.body.retention_count === undefined
-      ? existing.retention_count
-      : Math.max(0, Math.min(Number(req.body.retention_count) || 0, 100));
     db.prepare(`
-      UPDATE backup_plans SET project_id=?, provider_id=?, name=?, volume_selections=?, remote_path=?, pause_project=?, retention_count=?,
-      schedule_enabled=?, interval_hours=?, next_run_at=?, enabled=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
+      UPDATE backup_plans SET project_id=?, provider_id=?, name=?, volume_selections=?, remote_path=?, pause_project=?,
+      schedule_enabled=?, schedule_time=?, next_run_at=?, enabled=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
     `).run(
       projectId, providerId, req.body.name === undefined ? existing.name : req.body.name,
       JSON.stringify(selections), normalizedRemotePath,
       req.body.pause_project === undefined ? existing.pause_project : (req.body.pause_project ? 1 : 0),
-      retentionCount, scheduleEnabled, intervalHours, nextRunAt,
+      scheduleEnabled, scheduleTime, nextRunAt,
       req.body.enabled === undefined ? existing.enabled : (req.body.enabled ? 1 : 0), existing.id
     );
     res.json(serializePlan(db.prepare('SELECT * FROM backup_plans WHERE id=?').get(existing.id)));

@@ -4,6 +4,7 @@ const path = require('path');
 const {
   normalizeRelativePath,
   normalizeVolumeSelections,
+  normalizeScheduleTime,
   computeNextRun,
   normalizeRemotePath,
   buildRemotePath,
@@ -26,10 +27,17 @@ test('normalizes safe paths and rejects traversal', () => {
   assert.throws(() => normalizeRelativePath('../../etc'), /Invalid volume path/);
 });
 
-test('computes a bounded next run timestamp', () => {
-  const from = new Date('2026-08-05T00:00:00.000Z');
-  assert.equal(computeNextRun(6, from), '2026-08-05T06:00:00.000Z');
-  assert.equal(computeNextRun(0, from), '2026-08-05T01:00:00.000Z');
+test('computes the next daily run in the configured platform timezone', () => {
+  assert.equal(normalizeScheduleTime('03:00'), '03:00');
+  assert.throws(() => normalizeScheduleTime('24:00'), /HH:mm/);
+  assert.equal(
+    computeNextRun('03:00', 'Asia/Shanghai', new Date('2026-08-05T18:30:00.000Z')),
+    '2026-08-05T19:00:00.000Z'
+  );
+  assert.equal(
+    computeNextRun('03:00', 'America/New_York', new Date('2026-08-05T12:00:00.000Z')),
+    '2026-08-06T07:00:00.000Z'
+  );
 });
 
 test('builds stable remote paths and masks provider secrets', () => {

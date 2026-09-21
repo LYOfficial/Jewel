@@ -95,9 +95,8 @@ db.exec(`
     volume_selections TEXT DEFAULT '[]',
     remote_path TEXT DEFAULT '',
     pause_project INTEGER DEFAULT 1,
-    retention_count INTEGER DEFAULT 3,
     schedule_enabled INTEGER DEFAULT 0,
-    interval_hours INTEGER DEFAULT 24,
+    schedule_time TEXT DEFAULT '03:00',
     next_run_at TEXT,
     last_run_at TEXT,
     enabled INTEGER DEFAULT 1,
@@ -183,7 +182,7 @@ addColumnIfMissing('operation_logs', 'commit_hash', "TEXT DEFAULT ''");
 addColumnIfMissing('backup_tasks', 'operation_id', 'INTEGER DEFAULT NULL');
 addColumnIfMissing('backup_tasks', 'paused_container_ids', "TEXT DEFAULT '[]'");
 addColumnIfMissing('backup_tasks', 'previous_project_status', "TEXT DEFAULT ''");
-addColumnIfMissing('backup_plans', 'retention_count', 'INTEGER DEFAULT 3');
+addColumnIfMissing('backup_plans', 'schedule_time', "TEXT DEFAULT '03:00'");
 
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
 if (userCount.count === 0) {

@@ -172,14 +172,14 @@ test('cloud upload adapters build provider-specific destinations and keep rclone
   assert.equal(calls[3].args.includes('--path'), true);
 });
 
-test('retention pruning removes only older local staging archives', { skip: !hasSqlite }, () => {
+test('backup staging archives remain available locally', { skip: !hasSqlite }, () => {
   const project = db.prepare(`INSERT INTO projects (name, git_url) VALUES (?, ?)`)
     .run(`retention-${Date.now()}`, 'https://example.invalid/retention.git');
   const provider = db.prepare(`INSERT INTO backup_providers (name, type, config_json) VALUES (?, 'local', ?)`)
     .run('retention-local', JSON.stringify({ directory: path.join(dataDir, 'export') }));
   const plan = db.prepare(`
-    INSERT INTO backup_plans (project_id, provider_id, name, retention_count)
-    VALUES (?, ?, 'retention-plan', 1)
+    INSERT INTO backup_plans (project_id, provider_id, name)
+    VALUES (?, ?, 'local-archive-plan')
   `).run(Number(project.lastInsertRowid), Number(provider.lastInsertRowid));
 
   const taskIds = [];
@@ -199,15 +199,35 @@ test('retention pruning removes only older local staging archives', { skip: !has
     }]), taskId);
   }
 
-  const removed = backupService.prunePlanTaskArchives(Number(plan.lastInsertRowid), 1);
-  assert.equal(removed, 1);
-
   const older = JSON.parse(db.prepare('SELECT archives FROM backup_tasks WHERE id=?').get(taskIds[0]).archives)[0];
   const newest = JSON.parse(db.prepare('SELECT archives FROM backup_tasks WHERE id=?').get(taskIds[1]).archives)[0];
-  assert.equal(older.local_available, false);
-  assert.equal(older.local_path, '');
-  assert.equal(fs.existsSync(path.join(dataDir, 'backups', 'staging', String(taskIds[0]), `archive-${taskIds[0]}.tar.gz`)), false);
+  assert.equal(fs.existsSync(older.local_path), true);
   assert.equal(fs.existsSync(newest.local_path), true);
+});
+
+test('daily schedules use the configured Jewel timezone', { skip: !hasSqlite }, () => {
+  const timezone = db.prepare("SELECT value FROM settings WHERE key='timezone'").get().value;
+  const project = db.prepare('INSERT INTO projects (name, git_url) VALUES (?, ?)')
+    .run(`schedule-${Date.now()}`, 'https://example.invalid/repo.git');
+  const provider = db.prepare("INSERT INTO backup_providers (name, type, config_json) VALUES (?, 'local', '{}')")
+    .run(`schedule-local-${Date.now()}`);
+  const plan = db.prepare(`
+    INSERT INTO backup_plans (project_id, provider_id, name, schedule_enabled, schedule_time)
+    VALUES (?, ?, 'daily-schedule', 1, '03:00')
+  `).run(Number(project.lastInsertRowid), Number(provider.lastInsertRowid));
+
+  try {
+    db.prepare("UPDATE settings SET value='America/New_York' WHERE key='timezone'").run();
+    backupService.rescheduleScheduledPlans(new Date('2026-08-05T12:00:00.000Z'));
+    const scheduled = db.prepare('SELECT schedule_time, next_run_at FROM backup_plans WHERE id=?').get(plan.lastInsertRowid);
+    assert.equal(scheduled.schedule_time, '03:00');
+    assert.equal(scheduled.next_run_at, '2026-08-06T07:00:00.000Z');
+  } finally {
+    db.prepare("UPDATE settings SET value=? WHERE key='timezone'").run(timezone);
+    db.prepare('DELETE FROM backup_plans WHERE id=?').run(plan.lastInsertRowid);
+    db.prepare('DELETE FROM backup_providers WHERE id=?').run(provider.lastInsertRowid);
+    db.prepare('DELETE FROM projects WHERE id=?').run(project.lastInsertRowid);
+  }
 });
 
 function insertRunnableBackup(suffix) {
@@ -218,8 +238,8 @@ function insertRunnableBackup(suffix) {
     .run(`local-${suffix}`, JSON.stringify({ directory: providerDirectory, base_path: 'provider-root' }));
   const plan = db.prepare(`
     INSERT INTO backup_plans
-      (project_id, provider_id, name, volume_selections, remote_path, pause_project, retention_count)
-    VALUES (?, ?, ?, ?, 'daily', 1, 3)
+      (project_id, provider_id, name, volume_selections, remote_path, pause_project)
+    VALUES (?, ?, ?, ?, 'daily', 1)
   `).run(
     Number(project.lastInsertRowid), Number(provider.lastInsertRowid), `plan-${suffix}`,
     JSON.stringify([{ name: `volume-${suffix}`, paths: ['/'] }])

@@ -282,7 +282,7 @@ function insertRunnableBackup(suffix) {
   };
 }
 
-function installFakeDocker({ volumeName, archiveError = null }) {
+function installFakeDocker({ volumeName, archiveError = null, helperImageMissing = false }) {
   const original = {
     getDocker: dockerService.getDocker,
     getProjectContainers: dockerService.getProjectContainers,
@@ -306,7 +306,15 @@ function installFakeDocker({ volumeName, archiveError = null }) {
       assert.equal(name, volumeName);
       return { Name: name };
     } }),
-    getImage: () => ({ inspect: async () => ({ Id: 'helper-image' }) }),
+    getImage: () => ({ inspect: async () => {
+      if (helperImageMissing) throw new Error('helper image missing');
+      return { Id: 'helper-image' };
+    } }),
+    pull: (image, callback) => {
+      calls.push(`pull:${image}`);
+      callback(null, {});
+    },
+    modem: { followProgress: (stream, callback) => callback() },
     createContainer: async () => helper
   });
   dockerService.getProjectContainers = async () => [{
@@ -352,6 +360,26 @@ test('runs the complete pause, archive, local upload, and resume lifecycle', { s
   assert.equal(task.archives[0].remote.includes(`${path.sep}provider-root${path.sep}daily${path.sep}`), true);
   assert.equal(db.prepare('SELECT status FROM projects WHERE id=?').get(fixture.projectId).status, 'running');
   assert.equal(db.prepare('SELECT status FROM operation_logs WHERE id=?').get(task.operation_id).status, 'succeeded');
+});
+
+test('rechecks and pulls a missing helper image for each backup', { skip: !hasSqlite }, async () => {
+  const first = insertRunnableBackup('helper-image-one');
+  const second = insertRunnableBackup('helper-image-two');
+  db.prepare('UPDATE backup_plans SET volume_selections=? WHERE id IN (?, ?)')
+    .run(JSON.stringify([{ name: first.volumeName, paths: ['/'] }]), first.planId, second.planId);
+  const fake = installFakeDocker({ volumeName: first.volumeName, helperImageMissing: true });
+  let firstTask;
+  let secondTask;
+  try {
+    firstTask = await backupService.runTask(first.taskId);
+    secondTask = await backupService.runTask(second.taskId);
+  } finally {
+    fake.restore();
+  }
+
+  assert.equal(firstTask.status, 'succeeded');
+  assert.equal(secondTask.status, 'succeeded');
+  assert.equal(fake.calls.filter(call => call === 'pull:busybox:1.36').length, 2);
 });
 
 test('manual backup preserves the next scheduled run', { skip: !hasSqlite }, async () => {

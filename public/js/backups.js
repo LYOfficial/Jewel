@@ -448,7 +448,11 @@ const Backups = {
 
   formatDate(value) {
     if (!value) return '-';
-    const date = new Date(value);
+    const rawValue = String(value).trim();
+    const sqliteUtcValue = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(rawValue)
+      ? `${rawValue.replace(' ', 'T')}Z`
+      : rawValue;
+    const date = new Date(sqliteUtcValue);
     if (Number.isNaN(date.getTime())) return value;
     const timeZone = localStorage.getItem('jewel-timezone') || 'Asia/Shanghai';
     try {

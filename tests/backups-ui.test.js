@@ -13,6 +13,7 @@ test('storage target name uses the shared text input style', () => {
 test('backup plan text fields and daily schedule time use styled input types', () => {
   assert.match(source, /class="backup-run-now"/);
   assert.match(source, /Backups\.runPlan\(\$\{plan\.id\}\)/);
+  assert.match(source, /sqliteUtcValue/);
   assert.match(source, /<input id="backupPlanName" type="text"/);
   assert.match(source, /<input id="backupPlanRemotePath" type="text"/);
   assert.match(source, /<input type="text" class="volume-path-input"/);

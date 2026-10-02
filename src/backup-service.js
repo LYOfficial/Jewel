@@ -250,13 +250,13 @@ async function listVolumeResources(projectId) {
 }
 
 async function ensureHelperImage(taskId) {
+  const docker = dockerService.getDocker();
+  try {
+    await docker.getImage(HELPER_IMAGE).inspect();
+    return;
+  } catch { /* pull below */ }
   if (helperImagePromise) return helperImagePromise;
   helperImagePromise = (async () => {
-    const docker = dockerService.getDocker();
-    try {
-      await docker.getImage(HELPER_IMAGE).inspect();
-      return;
-    } catch { /* pull below */ }
     appendTaskLog(taskId, `Pulling backup helper image ${HELPER_IMAGE}`);
     const stream = await new Promise((resolve, reject) => {
       docker.pull(HELPER_IMAGE, (err, output) => err ? reject(err) : resolve(output));
@@ -264,9 +264,8 @@ async function ensureHelperImage(taskId) {
     await new Promise((resolve, reject) => {
       docker.modem.followProgress(stream, err => err ? reject(err) : resolve());
     });
-  })().catch(err => {
+  })().finally(() => {
     helperImagePromise = null;
-    throw err;
   });
   return helperImagePromise;
 }

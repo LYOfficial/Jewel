@@ -9,6 +9,7 @@ const gitService = require('./git-service');
 const projectEnvService = require('./project-env-service');
 const { cpuPercent, memoryUsage } = require('./project-resource-utils');
 const { findJewelContainer, summarizeJewelStorage } = require('./jewel-resource-utils');
+const config = require('./config');
 
 let docker = null;
 let dockerAvailable = null;
@@ -367,6 +368,7 @@ async function deployProject(project, { appendLog = false } = {}) {
   const cmd = `${composeCmd} -f "${composePath}" --project-name "${project.name}" up -d --build`;
 
   appendDeployLog(project.id, `\n$ ${cmd}\n`);
+  appendDeployLog(project.id, `[deploy] Command timeout: ${config.deployTimeoutMs} ms\n`);
 
   try {
     // Use async exec so the Node.js event loop stays responsive while
@@ -375,7 +377,7 @@ async function deployProject(project, { appendLog = false } = {}) {
     // platform appear frozen until the deploy finished.
     const result = await execAsync(cmd, {
       cwd: projectDir,
-      timeout: 600000,
+      timeout: config.deployTimeoutMs,
       env: { ...process.env },
       maxBuffer: 50 * 1024 * 1024
     });
@@ -388,7 +390,10 @@ async function deployProject(project, { appendLog = false } = {}) {
     const stdout = (err.stdout && err.stdout.toString()) || '';
     if (stdout) appendDeployLog(project.id, stdout);
     if (stderr) appendDeployLog(project.id, stderr);
-    appendDeployLog(project.id, `\n[error] Command exited with code ${err.code || err.status}\n`);
+    const failureReason = err.killed
+      ? `Command timed out after ${config.deployTimeoutMs} ms (signal: ${err.signal || 'unknown'})`
+      : `Command exited with code ${err.code ?? err.status ?? 'unknown'}`;
+    appendDeployLog(project.id, `\n[error] ${failureReason}\n`);
 
     // Salvage container logs BEFORE the cleanup teardown removes them. This
     // makes it possible to diagnose health-check timeouts, entrypoint hangs,
@@ -442,7 +447,7 @@ async function deployProject(project, { appendLog = false } = {}) {
     appendDeployLog(project.id, `\n=== Deploy failed at ${new Date().toISOString()} ===\n`);
 
     const detail = (stderr + stdout).trim() || err.message;
-    throw new Error(`Deploy failed: ${detail}`);
+    throw new Error(`Deploy failed: ${failureReason}\n${detail}`);
   }
 }
 

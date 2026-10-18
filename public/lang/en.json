@@ -490,7 +490,7 @@
   "mcp.copied": "Copied",
   "mcp.show": "Show",
   "mcp.hide": "Hide",
-  "mcp.headersHint": "The client must send both X-Jewel-Access-Key and Authorization: Bearer <token>.",
+  "mcp.headersHint": "Standard Authorization: Bearer <MCP Token> is supported; clients may also send X-Jewel-Access-Key or use the platform Access Key alone.",
   "mcp.security": "Scope",
   "mcp.scope": "MCP can read projects and logs, and deploy, update, rebuild, restart, or update Jewel. Project, container, image, and volume deletion plus arbitrary command execution are not exposed.",
   "mcp.tokens": "MCP Tokens",

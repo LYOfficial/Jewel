@@ -59,7 +59,24 @@ test('MCP authenticates an access-key/token pair and serves Streamable HTTP tool
     const tools = await request({ jsonrpc: '2.0', id: 3, method: 'tools/list' }, credentials);
     const toolsResult = await tools.json();
     assert.equal(toolsResult.result.tools.some(tool => tool.name === 'jewel_update_project'), true);
+    assert.equal(toolsResult.result.tools.some(tool => tool.name === 'jewel_get_deploy_log'), true);
+    assert.equal(toolsResult.result.tools.some(tool => tool.name === 'jewel_get_project_operations'), true);
     assert.equal(toolsResult.result.tools.some(tool => /delete|remove|exec/.test(tool.name)), false);
+
+    const bearerOnly = await request({ jsonrpc: '2.0', id: 31, method: 'tools/list' }, {
+      Authorization: `Bearer ${created.value}`
+    });
+    assert.equal(bearerOnly.status, 200);
+
+    const accessKeyOnly = await request({ jsonrpc: '2.0', id: 32, method: 'tools/list' }, {
+      'X-Jewel-Access-Key': accessKey
+    });
+    assert.equal(accessKeyOnly.status, 200);
+
+    const accessKeyBearer = await request({ jsonrpc: '2.0', id: 33, method: 'tools/list' }, {
+      Authorization: `Bearer ${accessKey}`
+    });
+    assert.equal(accessKeyBearer.status, 200);
 
     const projects = await request({
       jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'jewel_list_projects', arguments: {} }

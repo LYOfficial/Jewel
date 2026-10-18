@@ -339,7 +339,7 @@
   "mcp.copied": "已复制",
   "mcp.show": "显示",
   "mcp.hide": "隐藏",
-  "mcp.headersHint": "客户端必须同时发送 X-Jewel-Access-Key 和 Authorization: Bearer <token>。",
+  "mcp.headersHint": "支持标准 Authorization: Bearer <MCP Token>；也可同时发送 X-Jewel-Access-Key，或仅使用平台 Access Key。",
   "mcp.security": "权限范围",
   "mcp.scope": "MCP 仅能读取项目与日志，并执行部署、更新、重构、重启和 Jewel 更新；项目、容器、镜像、卷的删除及任意命令执行均不会开放。",
   "mcp.tokens": "MCP Token",

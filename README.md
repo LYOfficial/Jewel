@@ -251,7 +251,7 @@ MCP **不会**提供项目/容器/镜像/卷删除、任意容器命令执行、
 4. 创建成功时立即复制完整 Token。为了安全，Jewel 数据库只保存 Token 哈希，关闭弹窗后不能再次显示完整 Token；
 5. 不再使用的客户端请在同一页面点击“撤销”。撤销后 Token 立刻失效，历史操作记录仍会保留。
 
-一个 Jewel 实例只有一个 Access Key，但可以创建多个 MCP Token。每一次连接必须同时校验二者；缺少、过期或已撤销的 Token 都无法使用。MCP 页面中的“Token 操作记录”可查看创建、撤销、鉴权失败及工具调用的时间、来源与结果。
+一个 Jewel 实例只有一个 Access Key，但可以创建多个 MCP Token。推荐同时配置 Access Key 和 MCP Token；为兼容只支持标准 Bearer 认证的客户端，Jewel 也接受单独的有效 MCP Token，或单独的平台 Access Key。缺少、过期或已撤销的 MCP Token 都无法使用。MCP 页面中的“Token 操作记录”可查看创建、撤销、鉴权失败及工具调用的时间、来源与结果。
 
 ### 在 ChatGPT / Codex Desktop 中填写
 
@@ -274,7 +274,7 @@ setx JEWEL_MCP_TOKEN "jwl_mcp_创建时复制的完整Token"
 | Header 1 名称 | `X-Jewel-Access-Key` |
 | Header 1 值 | MCP 页面中复制的平台 Access Key |
 
-不要手动添加 `Authorization` 标头：该客户端会从 “Bearer 令牌环境变量” 中读取 Token 并自动发送它。下方“来自环境变量的标头”也不需要填写。
+不要手动添加 `Authorization` 标头：该客户端会从 “Bearer 令牌环境变量” 中读取 Token 并自动发送它。下方“来自环境变量的标头”也不需要填写。如果客户端不支持自定义 Header，可以只配置 `JEWEL_MCP_TOKEN`；如果它只允许一个固定密钥，也可以将平台 Access Key 作为 Bearer 令牌使用。
 
 如果 Jewel 直接以默认端口对可信内网提供服务，地址可以是 `http://服务器地址:330/mcp-server`；公网部署必须经由 HTTPS 反向代理，并在代理中原样转发 `Authorization` 与 `X-Jewel-Access-Key` 两个请求头。**不要**把 Access Key 或 Token 拼接到 URL 查询参数中，也不要将其发到聊天、Issue 或日志里。
 

@@ -110,24 +110,35 @@ function revokeToken(id, req = null) {
 function extractCredentials(req) {
   const authorization = String(req.headers.authorization || '');
   const bearer = authorization.match(/^Bearer\s+(.+)$/i);
-  // Query authentication is intentionally not supported: URLs frequently end
-  // up in reverse-proxy logs and browser history. Streamable HTTP clients can
-  // set both headers in their MCP configuration.
+  // MCP 客户端可使用标准 Bearer 令牌认证，避免依赖自定义请求头。
   return {
-    accessKey: req.headers['x-jewel-access-key'],
+    accessKey: req.headers['x-jewel-access-key'] || req.headers['x-mcp-access-key'] || req.headers['x-api-key'],
     token: bearer ? bearer[1].trim() : ''
   };
 }
 
 function authenticate(req) {
   const { accessKey, token: suppliedToken } = extractCredentials(req);
-  if (!safeEqual(accessKey, getAccessKey())) {
+  const configuredAccessKey = getAccessKey();
+  const hasAccessKey = Boolean(accessKey);
+  const accessKeyValid = safeEqual(accessKey, configuredAccessKey);
+  if (hasAccessKey && !accessKeyValid) {
     audit({ event: 'authentication_failed', success: false, detail: 'Invalid access key', req });
     return { ok: false, error: 'Invalid MCP credentials' };
   }
   if (!suppliedToken) {
+    if (accessKeyValid) {
+      audit({ event: 'authenticated', detail: 'Authenticated with platform access key', req });
+      return { ok: true, token: null, authMode: 'access_key' };
+    }
     audit({ event: 'authentication_failed', success: false, detail: 'Missing bearer token', req });
     return { ok: false, error: 'Invalid MCP credentials' };
+  }
+
+  // 兼容只支持单个 Authorization Bearer 凭据的 MCP 客户端。
+  if (safeEqual(suppliedToken, configuredAccessKey)) {
+    audit({ event: 'authenticated', detail: 'Authenticated with platform access key bearer', req });
+    return { ok: true, token: null, authMode: 'access_key' };
   }
 
   const prefix = suppliedToken.slice(0, TOKEN_PREFIX_LENGTH);

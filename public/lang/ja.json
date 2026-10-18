@@ -411,7 +411,7 @@
   "mcp.copied": "コピーしました",
   "mcp.show": "表示",
   "mcp.hide": "隠す",
-  "mcp.headersHint": "クライアントは X-Jewel-Access-Key と Authorization: Bearer <token> の両方を送信する必要があります。",
+  "mcp.headersHint": "標準の Authorization: Bearer <MCP Token> に対応しています。X-Jewel-Access-Key の併用、またはプラットフォーム Access Key 単独も利用できます。",
   "mcp.security": "権限範囲",
   "mcp.scope": "MCP はプロジェクトとログの読み取り、およびデプロイ、更新、再構築、再起動、Jewel 更新のみ可能です。削除操作と任意コマンド実行は公開されません。",
   "mcp.tokens": "MCP Token",

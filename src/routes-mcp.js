@@ -96,7 +96,7 @@ router.post('/', async (req, res) => {
     if (typeof toolName !== 'string') return send(res, jsonRpcError(id, -32602, 'tools/call requires a tool name'));
     try {
       const output = await mcpService.callTool(toolName, message.params.arguments || {});
-      mcpAuth.audit({ tokenId: auth.token.id, event: 'tool_called', toolName, detail: 'Tool completed', req });
+      mcpAuth.audit({ tokenId: auth.token && auth.token.id, event: 'tool_called', toolName, detail: 'Tool completed', req });
       return send(res, jsonRpc(id, {
         content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
         structuredContent: output
@@ -105,7 +105,7 @@ router.post('/', async (req, res) => {
       const detail = err && err.report
         ? `${err.message}\n\n${err.report}`
         : (err && err.message ? err.message : 'Tool execution failed');
-      mcpAuth.audit({ tokenId: auth.token.id, event: 'tool_called', toolName, success: false, detail, req });
+      mcpAuth.audit({ tokenId: auth.token && auth.token.id, event: 'tool_called', toolName, success: false, detail, req });
       return send(res, jsonRpc(id, {
         content: [{ type: 'text', text: detail }],
         isError: true

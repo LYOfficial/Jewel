@@ -409,7 +409,7 @@
   "mcp.copied": "已複製",
   "mcp.show": "顯示",
   "mcp.hide": "隱藏",
-  "mcp.headersHint": "用戶端必須同時傳送 X-Jewel-Access-Key 與 Authorization: Bearer <token>。",
+  "mcp.headersHint": "支援標準 Authorization: Bearer <MCP Token>；也可同時傳送 X-Jewel-Access-Key，或只使用平台 Access Key。",
   "mcp.security": "權限範圍",
   "mcp.scope": "MCP 僅能讀取專案與日誌，並執行部署、更新、重構、重新啟動與 Jewel 更新；不會開放刪除及任意命令執行。",
   "mcp.tokens": "MCP Token",

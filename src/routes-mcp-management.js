@@ -1,9 +1,9 @@
 const express = require('express');
-const { authMiddleware, requireAdmin } = require('./auth');
+const { authMiddleware } = require('./auth');
 const mcpAuth = require('./mcp-auth-service');
 
 const router = express.Router();
-router.use(authMiddleware, requireAdmin);
+router.use(authMiddleware);
 
 router.get('/config', (req, res) => {
   res.set('Cache-Control', 'no-store');

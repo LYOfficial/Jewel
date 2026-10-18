@@ -51,7 +51,15 @@ const Projects = {
               ${p.update_available ? `<span class="badge badge-update" data-i18n="project.updateAvailable">有更新</span>` : ''}
             </td>
             <td class="action-cell" data-project-actions="${p.id}">
-              ${App.actionMenu([
+              ${App.currentUser?.role === 'maintainer' ? `
+                <div class="project-maintainer-actions">
+                  ${p.source_type !== 'compose' ? `<button type="button" class="btn btn-sm" onclick="Projects.checkUpdate(${p.id})">检查更新</button>` : ''}
+                  ${p.source_type !== 'compose' && p.update_available ? `<button type="button" class="btn btn-sm btn-update" onclick="Projects.updateProject(${p.id})">更新</button>` : ''}
+                  <button type="button" class="btn btn-sm btn-primary" onclick="Projects.deploy(${p.id})">部署</button>
+                  ${p.source_type !== 'compose' ? `<button type="button" class="btn btn-sm" onclick="Projects.rebuild(${p.id})">重构</button>` : ''}
+                  <button type="button" class="btn btn-sm" onclick="Projects.stop(${p.id})">停止</button>
+                  <button type="button" class="btn btn-sm" onclick="Projects.showDetail(${p.id})">详情</button>
+                </div>` : App.actionMenu([
                 { label: I18n.t('project.checkUpdate') || '检查更新', icon: '⌕', visible: p.source_type === 'compose' ? false : undefined, onclick: `Projects.checkUpdate(${p.id}, true)` },
                 { label: I18n.t('project.update') || '更新', icon: '↥', visible: p.source_type !== 'compose' && !!p.update_available, onclick: `Projects.updateProject(${p.id})` },
                 { label: I18n.t('project.deploy') || '部署', icon: '▶', onclick: `Projects.deploy(${p.id})` },
@@ -476,7 +484,7 @@ const Projects = {
 
       let tokenOptions = '';
       let hasMatchingToken = false;
-      if (!isComposeProject) {
+      if (!isComposeProject && isAdmin) {
         try {
         const savedTokens = await API.getTokens();
         if (savedTokens.length > 0) {
@@ -495,7 +503,7 @@ const Projects = {
       const content = `
         <div class="project-detail-tabs" role="tablist" aria-label="${esc(I18n.t('project.detail') || '项目详情')}">
           <button class="project-detail-tab active" type="button" role="tab" aria-selected="true" data-project-detail-tab="dashboard">${esc(I18n.t('project.dashboard') || '仪表盘')}</button>
-          <button class="project-detail-tab" type="button" role="tab" aria-selected="false" data-project-detail-tab="deploy" ${isAdmin ? '' : 'hidden'}>${esc(I18n.t('project.deployment') || '部署')}</button>
+          <button class="project-detail-tab" type="button" role="tab" aria-selected="false" data-project-detail-tab="deploy">${esc(isAdmin ? (I18n.t('project.deployment') || '部署') : (I18n.t('project.detail') || '详情'))}</button>
         </div>
         <section class="project-detail-panel" data-project-detail-panel="dashboard">
         <div class="project-detail-hero">
@@ -537,7 +545,7 @@ const Projects = {
           <label data-i18n="project.gitUrl">Git 仓库 URL</label>
           <input type="url" id="detailGitUrl" value="${esc(project.git_url)}">
         </div>
-        <div class="form-group">
+        ${isAdmin ? `<div class="form-group">
           <label data-i18n="project.selectToken">选择已保存的令牌</label>
           <select id="detailTokenSelect">
             <option value="" ${!project.git_token ? 'selected' : ''} data-i18n="project.noToken">不使用令牌</option>
@@ -548,7 +556,7 @@ const Projects = {
         <div class="form-group" id="detailManualTokenGroup" style="display:${project.git_token && !hasMatchingToken ? 'block' : 'none'}">
           <label data-i18n="project.gitToken">Git Token</label>
           <input type="text" id="detailGitToken" value="${esc(project.git_token)}" placeholder="ghp_xxxx">
-        </div>
+        </div>` : ''}
         <div class="form-row">
           <div class="form-group">
             <label data-i18n="project.branch">分支</label>
@@ -619,6 +627,16 @@ const Projects = {
         ...(isAdmin ? [{ label: I18n.t('common.save') || '保存', class: 'btn-primary', onClick: () => this.saveProject(project.id) }] : [])
       ]);
       I18n.apply();
+
+      if (!isAdmin) {
+        document.querySelectorAll('[data-project-detail-panel="deploy"] input, [data-project-detail-panel="deploy"] select, [data-project-detail-panel="deploy"] textarea').forEach(field => { field.disabled = true; });
+        const dashboardPanel = document.querySelector('[data-project-detail-panel="dashboard"]');
+        ['projectDeployLog', 'projectFailedContainerLogs', 'projectLogs', 'projectOperationTimeline'].forEach(panelId => {
+          const panel = document.getElementById(panelId);
+          const group = panel && panel.closest('.form-group');
+          if (dashboardPanel && group) dashboardPanel.appendChild(group);
+        });
+      }
 
       document.querySelectorAll('[data-project-detail-tab]').forEach(tab => {
         tab.addEventListener('click', () => this.setDetailTab(tab.dataset.projectDetailTab));

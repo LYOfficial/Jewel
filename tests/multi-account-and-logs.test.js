@@ -23,3 +23,15 @@ test('account schema and project assignment API are present', () => {
   assert.match(usersSource, /project_ids/);
   assert.match(usersSource, /Only maintainer accounts can receive project assignments/);
 });
+
+test('maintainers keep backup and MCP access while platform administration stays restricted', () => {
+  const indexSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const backupRoutes = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes-backups.js'), 'utf8');
+  const mcpRoutes = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes-mcp-management.js'), 'utf8');
+  assert.match(indexSource, /data-page="backups" href="\/backups"/);
+  assert.match(indexSource, /data-page="mcp" href="\/mcp"/);
+  assert.doesNotMatch(indexSource, /data-page="backups"[^>]*admin-only/);
+  assert.doesNotMatch(indexSource, /data-page="mcp"[^>]*admin-only/);
+  assert.match(backupRoutes, /router\.use\(authMiddleware\);/);
+  assert.match(mcpRoutes, /router\.use\(authMiddleware\);/);
+});

@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('./database');
-const { authMiddleware, requireAdmin } = require('./auth');
+const { authMiddleware } = require('./auth');
 const backupService = require('./backup-service');
 const operationService = require('./operation-service');
 const {
@@ -14,7 +14,7 @@ const {
 } = require('./backup-utils');
 
 const router = express.Router();
-router.use(authMiddleware, requireAdmin);
+router.use(authMiddleware);
 
 function sanitizeProvider(row) {
   if (!row) return row;

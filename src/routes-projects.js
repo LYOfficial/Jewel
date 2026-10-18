@@ -35,6 +35,14 @@ function withDockerReadTimeout(promise, label = 'Docker read') {
 router.use(authMiddleware);
 router.use('/:id', requireProjectAccess);
 
+function projectForUser(project, user) {
+  if (!project || !user || user.role === 'admin') return project;
+  const safe = { ...project };
+  delete safe.git_token;
+  delete safe.git_token_id;
+  return safe;
+}
+
 function projectQuery(whereClause = '') {
   return `
     SELECT p.*,
@@ -110,13 +118,13 @@ async function runProjectOperation({ res, project, action, activeStatus, success
 router.get('/', (req, res) => {
   const filter = req.user.role === 'admin' ? '' : 'WHERE EXISTS (SELECT 1 FROM project_user_assignments pm WHERE pm.project_id = p.id AND pm.user_id = ?)';
   const projects = db.prepare(`${projectQuery(filter)} ORDER BY p.created_at DESC`).all(...(req.user.role === 'admin' ? [] : [req.user.id]));
-  res.json(projects);
+  res.json(projects.map(project => projectForUser(project, req.user)));
 });
 
 router.get('/:id', (req, res) => {
   const project = db.prepare(projectQuery('WHERE p.id = ?')).get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  res.json(project);
+  res.json(projectForUser(project, req.user));
 });
 
 router.post('/', requireAdmin, async (req, res) => {
@@ -405,7 +413,7 @@ router.post('/:id/check-update', async (req, res) => {
   try {
     const updated = await projectUpdateService.checkProjectUpdate(req.params.id, { waitForLock: false });
     if (!updated) return res.status(404).json({ error: 'Project not found' });
-    res.json(updated);
+    res.json(projectForUser(updated, req.user));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

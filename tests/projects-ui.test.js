@@ -155,6 +155,21 @@ test('project action menu always includes check update', async () => {
   assert.equal(update.visible, false);
 });
 
+test('maintainer project rows expose operation buttons directly', () => {
+  assert.match(projectsSource, /project-maintainer-actions/);
+  assert.match(projectsSource, /Projects\.checkUpdate\(\$\{p\.id\}\)/);
+  assert.match(projectsSource, /Projects\.deploy\(\$\{p\.id\}\)/);
+  assert.match(projectsSource, /Projects\.rebuild\(\$\{p\.id\}\)/);
+  assert.match(projectsSource, /Projects\.stop\(\$\{p\.id\}\)/);
+  assert.match(projectsSource, /Projects\.showDetail\(\$\{p\.id\}\)/);
+});
+
+test('maintainers cannot receive saved token or Git Token fields', () => {
+  assert.match(projectsSource, /if \(!isComposeProject && isAdmin\)/);
+  assert.match(projectsSource, /\$\{isAdmin \? `<div class="form-group">/);
+  assert.match(projectRoutesSource, /delete safe\.git_token/);
+});
+
 test('direct Docker Compose projects hide Git-only actions', async () => {
   const harness = createProjectsHarness({ ...project, source_type: 'compose' });
   await harness.Projects.loadList();

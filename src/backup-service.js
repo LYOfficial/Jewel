@@ -6,6 +6,7 @@ const { spawn } = require('child_process');
 const db = require('./database');
 const config = require('./config');
 const dockerService = require('./docker-service');
+const incrementalBackup = require('./incremental-backup-service');
 const operations = require('./operation-service');
 const {
   parseJson,
@@ -460,6 +461,44 @@ async function uploadArchive(taskId, provider, project, plan, archive, commandRu
   throw new Error(`Unsupported provider: ${provider.type}`);
 }
 
+async function uploadSnapshotObject(taskId, provider, project, plan, object, commandRunner = runCommand) {
+  const providerConfig = parseJson(provider.config_json, {});
+  const base = [providerConfig.base_path, plan.remote_path, safeSegment(project.name), 'incremental', 'objects'].filter(Boolean).join('/');
+  const remotePath = `${base}/${object.kind === 'manifest' ? safeSegment(object.name, 'manifest') : safeSegment(object.hash || object.name, 'object')}`;
+  if (provider.type === 'local') {
+    const destination = resolveLocalDestination(providerConfig.directory, remotePath);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    await fs.promises.copyFile(object.local_path, destination);
+    return destination;
+  }
+  if (provider.type === 'r2') {
+    const env = r2Environment(providerConfig);
+    const target = `jewelr2:${String(providerConfig.bucket).replace(/^\/+|\/+$/g, '')}/${remotePath}`;
+    await commandRunner('rclone', ['copyto', object.local_path, target], { env });
+    return target;
+  }
+  if (provider.type === 'onedrive') {
+    const { remoteName, env } = oneDriveEnvironment(providerConfig);
+    const target = `${remoteName}:${remotePath}`;
+    await commandRunner('rclone', ['copyto', object.local_path, target], { env });
+    return target;
+  }
+  if (provider.type === 'baidu') {
+    const target = ['Jewel', remotePath].join('/');
+    await commandRunner('bypy', ['--config-dir', providerConfig.config_dir, 'upload', object.local_path, target]);
+    return target;
+  }
+  if (provider.type === 'anyshare') {
+    const helper = path.join(__dirname, '..', 'scripts', 'anyshare_upload.py');
+    const args = [helper, '--link', providerConfig.share_link, '--file', object.local_path];
+    if (providerConfig.base_url) args.push('--base-url', providerConfig.base_url);
+    args.push('--path', normalizeRemotePath([providerConfig.base_path, plan.remote_path, safeSegment(project.name), 'incremental', 'objects'].filter(Boolean).join('/')));
+    await commandRunner('python3', args);
+    return remotePath;
+  }
+  throw new Error(`Unsupported provider: ${provider.type}`);
+}
+
 async function runTask(taskId) {
   const task = db.prepare('SELECT * FROM backup_tasks WHERE id = ?').get(taskId);
   if (!task) throw new Error('Backup task not found');
@@ -513,9 +552,27 @@ async function runTask(taskId) {
     }
 
     setTaskPhase(taskId, 'uploading');
-    for (const archive of archives) {
-      archive.remote = await uploadArchive(taskId, provider, project, plan, archive);
-      db.prepare('UPDATE backup_tasks SET archives=? WHERE id=?').run(JSON.stringify(archives), taskId);
+    if (plan.backup_mode !== 'incremental') {
+      for (const archive of archives) {
+        archive.remote = await uploadArchive(taskId, provider, project, plan, archive);
+        db.prepare('UPDATE backup_tasks SET archives=? WHERE id=?').run(JSON.stringify(archives), taskId);
+      }
+    }
+
+    let snapshot = null;
+    if (plan.include_platform_data !== 0) {
+      setTaskPhase(taskId, 'snapshotting');
+      snapshot = await incrementalBackup.prepareSnapshot({
+        task, plan, provider, archives,
+        uploadObject: object => uploadSnapshotObject(taskId, provider, project, plan, object)
+      });
+      appendTaskLog(taskId, `Incremental snapshot #${snapshot.id} (${snapshot.mode}) stored ${snapshot.bytes_total} new bytes`);
+      try {
+        const removedSnapshots = incrementalBackup.pruneSnapshots(plan.id, plan.retention_count);
+        if (removedSnapshots) appendTaskLog(taskId, `Removed ${removedSnapshots} expired snapshot(s)`);
+      } catch (err) {
+        appendTaskLog(taskId, `Warning: failed to prune snapshots: ${err.message}`);
+      }
     }
 
     setTaskPhase(taskId, 'resuming');
@@ -740,6 +797,36 @@ module.exports = {
   runTask,
   getTask,
   listTasks,
+  listSnapshots: incrementalBackup.listSnapshots,
+  restoreSnapshot: async snapshotId => {
+    const snapshot = db.prepare('SELECT * FROM backup_snapshots WHERE id=?').get(snapshotId);
+    if (!snapshot) return incrementalBackup.restoreSnapshot(snapshotId);
+    const provider = snapshot.provider_id ? db.prepare('SELECT * FROM backup_providers WHERE id=?').get(snapshot.provider_id) : null;
+    const plan = db.prepare('SELECT * FROM backup_plans WHERE id=?').get(snapshot.plan_id);
+    const project = plan ? db.prepare('SELECT * FROM projects WHERE id=?').get(plan.project_id) : null;
+    if (!provider || !plan || !project) throw new Error('Backup provider or plan no longer exists');
+    const manifest = JSON.parse(snapshot.manifest_json || '{}');
+    return incrementalBackup.restoreSnapshot(snapshotId, async (item, destination) => {
+      const file = (manifest.files || []).find(entry => entry.hash === item.hash);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      if (provider.type === 'local') {
+        if (!file || !file.remote || !path.isAbsolute(file.remote)) throw new Error(`本地存储目标中找不到快照对象 ${item.hash}`);
+        return fs.promises.copyFile(file.remote, destination);
+      }
+      if (!file || !file.remote) throw new Error(`快照对象 ${item.hash} 没有远端路径`);
+      const providerConfig = parseJson(provider.config_json, {});
+      if (provider.type === 'r2' || provider.type === 'onedrive') {
+        const env = provider.type === 'r2' ? r2Environment(providerConfig) : oneDriveEnvironment(providerConfig).env;
+        await runCommand('rclone', ['copyto', file.remote, destination], { env, timeoutMs: 120000 });
+        return;
+      }
+      if (provider.type === 'baidu') {
+        await runCommand('bypy', ['--config-dir', providerConfig.config_dir, 'downfile', file.remote, destination], { timeoutMs: 120000 });
+        return;
+      }
+      throw new Error('AnyShare 暂不支持自动下载恢复对象');
+    });
+  },
   uploadArchive,
   testProvider,
   recoverInterruptedTasks,

@@ -106,6 +106,8 @@ db.exec(`
     remote_path TEXT DEFAULT '',
     pause_project INTEGER DEFAULT 1,
     retention_count INTEGER DEFAULT 3,
+    backup_mode TEXT DEFAULT 'full',
+    include_platform_data INTEGER DEFAULT 1,
     schedule_enabled INTEGER DEFAULT 0,
     schedule_time TEXT DEFAULT '03:00',
     next_run_at TEXT,
@@ -134,11 +136,31 @@ db.exec(`
     log TEXT DEFAULT '',
     started_at TEXT,
     completed_at TEXT,
+    snapshot_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (plan_id) REFERENCES backup_plans(id) ON DELETE SET NULL,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     FOREIGN KEY (provider_id) REFERENCES backup_providers(id) ON DELETE SET NULL,
     FOREIGN KEY (operation_id) REFERENCES operation_logs(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS backup_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    task_id INTEGER,
+    provider_id INTEGER,
+    parent_id INTEGER,
+    mode TEXT NOT NULL DEFAULT 'full',
+    status TEXT NOT NULL DEFAULT 'running',
+    manifest_json TEXT NOT NULL DEFAULT '{}',
+    bytes_total INTEGER DEFAULT 0,
+    error TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT,
+    FOREIGN KEY (plan_id) REFERENCES backup_plans(id) ON DELETE CASCADE,
+    FOREIGN KEY (task_id) REFERENCES backup_tasks(id) ON DELETE SET NULL,
+    FOREIGN KEY (provider_id) REFERENCES backup_providers(id) ON DELETE SET NULL,
+    FOREIGN KEY (parent_id) REFERENCES backup_snapshots(id) ON DELETE SET NULL
   );
 
   -- MCP credentials are deliberately separate from web-login JWTs and Git
@@ -196,6 +218,9 @@ addColumnIfMissing('backup_tasks', 'paused_container_ids', "TEXT DEFAULT '[]'");
 addColumnIfMissing('backup_tasks', 'previous_project_status', "TEXT DEFAULT ''");
 addColumnIfMissing('backup_plans', 'retention_count', 'INTEGER DEFAULT 3');
 addColumnIfMissing('backup_plans', 'schedule_time', "TEXT DEFAULT '03:00'");
+addColumnIfMissing('backup_plans', 'backup_mode', "TEXT DEFAULT 'full'");
+addColumnIfMissing('backup_plans', 'include_platform_data', 'INTEGER DEFAULT 1');
+addColumnIfMissing('backup_tasks', 'snapshot_id', 'INTEGER DEFAULT NULL');
 
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
 if (userCount.count === 0) {
@@ -216,5 +241,6 @@ const upsertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VA
 for (const [key, value] of Object.entries(defaultSettings)) {
   upsertSetting.run(key, value);
 }
+db.prepare("UPDATE backup_plans SET backup_mode='full' WHERE backup_mode IS NULL OR backup_mode='' ").run();
 
 module.exports = db;

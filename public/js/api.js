@@ -217,6 +217,8 @@ const API = {
   runBackupPlan(id) { return this.post(`/backups/plans/${id}/run`, null, { timeoutMs: 0 }); },
   getBackupTasks(limit = 50) { return this.get(`/backups/tasks?limit=${limit}`); },
   getBackupTask(id) { return this.get(`/backups/tasks/${id}`); },
+  getBackupSnapshots(limit = 50) { return this.get(`/backups/snapshots?limit=${limit}`); },
+  restoreBackupSnapshot(id) { return this.post(`/backups/snapshots/${id}/restore`, null, { timeoutMs: 0 }); },
 
   // System
   getSystemInfo() { return this.get('/system/info'); },

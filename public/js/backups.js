@@ -1,6 +1,6 @@
 const Backups = {
   refreshTimer: null,
-  data: { projects: [], providers: [], plans: [], tasks: [] },
+  data: { projects: [], providers: [], plans: [], tasks: [], snapshots: [] },
 
   t(key, fallback, values = {}) {
     const translated = I18n.currentLang === 'zh-CN' ? fallback : I18n.t(`backup.${key}`);
@@ -37,6 +37,10 @@ const Backups = {
             <div id="backupTasks" class="table-container"></div>
           </section>
         </div>
+        <section class="section-card">
+          <div class="section-card-header"><div><h3>${this.t('recoveryPoints', '恢复点')}</h3><p>${this.t('recoveryPointsDescription', '增量快照只保存变化对象，可用于本机数据库和平台数据回档。')}</p></div></div>
+          <div id="backupSnapshots" class="table-container"></div>
+        </section>
       </div>`;
     document.getElementById('addBackupProvider').addEventListener('click', () => this.showProviderForm());
     document.getElementById('addBackupPlan').addEventListener('click', () => this.showPlanForm());
@@ -51,14 +55,15 @@ const Backups = {
 
   async loadAll() {
     try {
-      const [projects, providers, plans, tasks] = await Promise.all([
-        API.getProjects(), API.getBackupProviders(), API.getBackupPlans(), API.getBackupTasks(30)
+      const [projects, providers, plans, tasks, snapshots] = await Promise.all([
+        API.getProjects(), API.getBackupProviders(), API.getBackupPlans(), API.getBackupTasks(30), API.getBackupSnapshots(30)
       ]);
-      this.data = { projects, providers, plans, tasks };
+      this.data = { projects, providers, plans, tasks, snapshots };
       this.renderOverview();
       this.renderProviders();
       this.renderPlans();
       this.renderTasks();
+      this.renderSnapshots();
     } catch (err) {
       App.showApiError(err, this.t('loadFailed', '加载备份中心失败'));
     }
@@ -70,10 +75,31 @@ const Backups = {
       this.data.tasks = await API.getBackupTasks(30);
       this.renderOverview();
       this.renderTasks();
+      this.data.snapshots = await API.getBackupSnapshots(30);
+      this.renderSnapshots();
       if (!this.data.tasks.some(task => ['queued', 'running'].includes(task.status))) return;
       this.data.plans = await API.getBackupPlans();
       this.renderPlans();
     } catch { /* background refresh is best effort */ }
+  },
+
+  renderSnapshots() {
+    const el = document.getElementById('backupSnapshots');
+    if (!el) return;
+    if (!this.data.snapshots.length) {
+      el.innerHTML = `<div class="compact-empty">${this.t('noSnapshots', '暂无可恢复快照。')}</div>`;
+      return;
+    }
+    el.innerHTML = `<table class="compact-table"><thead><tr><th>${this.t('snapshot', '快照')}</th><th>${this.t('mode', '模式')}</th><th>${this.t('newData', '新增数据')}</th><th>${this.t('createdAt', '创建时间')}</th><th></th></tr></thead><tbody>${this.data.snapshots.map(snapshot => `<tr><td><strong>#${snapshot.id}</strong><div class="table-subtext">${App.escapeHtml(snapshot.plan_name || '-')}</div></td><td>${snapshot.mode === 'incremental' ? this.t('incremental', '增量') : this.t('full', '全量')}</td><td>${this.formatSize(snapshot.bytes_total || 0)}</td><td>${this.formatDate(snapshot.created_at)}</td><td><button class="btn btn-sm" type="button" onclick="Backups.restoreSnapshot(${snapshot.id})">${this.t('restore', '恢复')}</button></td></tr>`).join('')}</tbody></table>`;
+  },
+
+  async restoreSnapshot(id) {
+    const ok = await Modal.confirm({ title: this.t('restoreSnapshot', '恢复快照'), body: this.t('restoreSnapshotHint', '恢复会替换 Jewel 的数据库和平台文件，完成后需要重启 Jewel 才能加载回档数据。是否继续？'), okLabel: this.t('restore', '恢复'), okClass: 'btn-danger' });
+    if (!ok) return;
+    try {
+      await API.restoreBackupSnapshot(id);
+      Notify.success(this.t('restoreStarted', '快照已恢复，请重启 Jewel'));
+    } catch (err) { App.showApiError(err, this.t('restoreFailed', '恢复快照失败')); }
   },
 
   renderOverview() {
@@ -291,6 +317,7 @@ const Backups = {
       </div>
       <div class="form-group"><label>${this.t('volumesAndPaths', '挂载卷与备份路径')}</label><div id="backupPlanVolumes" class="volume-picker"><div class="loading-inline">${this.t('discoveringVolumes', '正在发现项目挂载卷…')}</div></div></div>
       <div class="backup-options-grid">
+        <label class="option-card"><input type="checkbox" id="backupIncrementalMode" ${plan?.backup_mode === 'full' ? '' : 'checked'}><span><strong>${this.t('incrementalBackup', '增量备份')}</strong><small>${this.t('incrementalBackupHint', '只上传发生变化的数据对象，首次执行自动建立全量基线。')}</small></span></label>
         <label class="option-card"><input type="checkbox" id="backupPauseProject" ${plan?.pause_project === 0 ? '' : 'checked'}><span><strong>${this.t('consistentPause', '一致性暂停')}</strong><small>${this.t('consistentPauseHint', '打包前暂停项目容器，上传后自动恢复。')}</small></span></label>
         <label class="option-card"><input type="checkbox" id="backupScheduleEnabled" ${plan?.schedule_enabled ? 'checked' : ''}><span><strong>${this.t('automaticBackup', '自动备份')}</strong><small>${this.t('automaticBackupHint', '每天在平台时区的指定时间运行。')}</small></span></label>
       </div>
@@ -348,6 +375,7 @@ const Backups = {
       retention_count: Math.max(0, Math.min(Number(document.getElementById('backupRetentionCount').value) || 0, 100)),
       schedule_enabled: document.getElementById('backupScheduleEnabled').checked,
       schedule_time: document.getElementById('backupScheduleTime').value || '03:00'
+      , backup_mode: document.getElementById('backupIncrementalMode').checked ? 'incremental' : 'full'
     };
     if (!data.name) return Notify.error(this.t('planNameRequired', '请输入计划名称'));
     if (!selections.length) return Notify.error(this.t('selectVolume', '至少选择一个挂载卷'));

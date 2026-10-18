@@ -117,7 +117,7 @@ router.post('/plans', async (req, res) => {
   try {
     const {
       project_id, provider_id, name, volume_selections, remote_path = '', pause_project = true, retention_count = 3,
-      schedule_enabled = false, schedule_time = '03:00', enabled = true
+      schedule_enabled = false, schedule_time = '03:00', enabled = true, backup_mode = 'incremental', include_platform_data = true
     } = req.body || {};
     const project = db.prepare('SELECT * FROM projects WHERE id=?').get(project_id);
     const provider = db.prepare('SELECT * FROM backup_providers WHERE id=?').get(provider_id);
@@ -131,11 +131,12 @@ router.post('/plans', async (req, res) => {
     const normalizedRemotePath = normalizeRemotePath(remote_path);
     const result = db.prepare(`
       INSERT INTO backup_plans
-      (project_id, provider_id, name, volume_selections, remote_path, pause_project, retention_count, schedule_enabled, schedule_time, next_run_at, enabled)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (project_id, provider_id, name, volume_selections, remote_path, pause_project, retention_count, backup_mode, include_platform_data, schedule_enabled, schedule_time, next_run_at, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       project.id, provider.id, name || `${project.name} backup`, JSON.stringify(selections), normalizedRemotePath,
       pause_project ? 1 : 0, Math.max(0, Math.min(Number(retention_count) || 0, 100)),
+      backup_mode === 'full' ? 'full' : 'incremental', include_platform_data === false ? 0 : 1,
       schedule_enabled ? 1 : 0, scheduleTime, nextRunAt, enabled ? 1 : 0
     );
     res.status(201).json(serializePlan(db.prepare('SELECT * FROM backup_plans WHERE id=?').get(result.lastInsertRowid)));
@@ -171,14 +172,16 @@ router.put('/plans/:id', async (req, res) => {
     const retentionCount = req.body.retention_count === undefined
       ? existing.retention_count
       : Math.max(0, Math.min(Number(req.body.retention_count) || 0, 100));
+    const backupMode = req.body.backup_mode === undefined ? (existing.backup_mode || 'incremental') : (req.body.backup_mode === 'full' ? 'full' : 'incremental');
+    const includePlatformData = req.body.include_platform_data === undefined ? existing.include_platform_data : (req.body.include_platform_data ? 1 : 0);
     db.prepare(`
-      UPDATE backup_plans SET project_id=?, provider_id=?, name=?, volume_selections=?, remote_path=?, pause_project=?, retention_count=?,
+      UPDATE backup_plans SET project_id=?, provider_id=?, name=?, volume_selections=?, remote_path=?, pause_project=?, retention_count=?, backup_mode=?, include_platform_data=?,
       schedule_enabled=?, schedule_time=?, next_run_at=?, enabled=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
     `).run(
       projectId, providerId, req.body.name === undefined ? existing.name : req.body.name,
       JSON.stringify(selections), normalizedRemotePath,
       req.body.pause_project === undefined ? existing.pause_project : (req.body.pause_project ? 1 : 0),
-      retentionCount, scheduleEnabled, scheduleTime, nextRunAt,
+      retentionCount, backupMode, includePlatformData ? 1 : 0, scheduleEnabled, scheduleTime, nextRunAt,
       req.body.enabled === undefined ? existing.enabled : (req.body.enabled ? 1 : 0), existing.id
     );
     res.json(serializePlan(db.prepare('SELECT * FROM backup_plans WHERE id=?').get(existing.id)));
@@ -216,6 +219,18 @@ router.get('/tasks/:id', (req, res) => {
     task.diagnostic_report = operationService.report(operation, project, '', task.log);
   }
   res.json(task);
+});
+
+router.get('/snapshots', (req, res) => {
+  res.json(backupService.listSnapshots(req.query.limit));
+});
+
+router.post('/snapshots/:id/restore', async (req, res) => {
+  try {
+    res.json(await backupService.restoreSnapshot(Number(req.params.id)));
+  } catch (err) {
+    res.status(422).json({ error: err.message });
+  }
 });
 
 module.exports = router;

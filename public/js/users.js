@@ -11,8 +11,8 @@ const Users = {
       <div class="page-shell list-page">
         <section class="section-card">
           <div class="section-card-header"><div><h3>账号管理</h3><p>创建共同维护者账号，并分派可维护的项目。</p></div></div>
-          <form id="createMaintainerForm" class="form-row" style="align-items:end">
-            <div class="form-group"><label>用户名</label><input id="newMaintainerName" required minlength="3"></div>
+          <form id="createMaintainerForm" class="maintainer-form">
+            <div class="form-group"><label>用户名</label><input id="newMaintainerName" type="text" required minlength="3"></div>
             <div class="form-group"><label>初始密码</label><input id="newMaintainerPassword" type="password" required minlength="6"></div>
             <button class="btn btn-primary" type="submit">创建维护者</button>
           </form>

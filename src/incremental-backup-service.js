@@ -24,7 +24,7 @@ function walk(directory, result = []) {
   if (!fs.existsSync(directory)) return result;
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const full = path.join(directory, entry.name);
-    if (entry.name === 'backups' || entry.name === 'jewel.db-wal' || entry.name === 'jewel.db-shm') continue;
+    if (entry.name === 'backups' || entry.name === 'projects' || entry.name === 'jewel.db-wal' || entry.name === 'jewel.db-shm') continue;
     if (entry.isDirectory()) walk(full, result);
     else if (entry.isFile()) result.push(full);
   }
@@ -45,7 +45,7 @@ async function createDbCopy(target) {
   await db.backup(target);
 }
 
-async function prepareSnapshot({ task, plan, provider, archives, uploadObject }) {
+async function prepareSnapshot({ task, plan, provider, archives, uploadObject, onProgress = () => {} }) {
   const previous = db.prepare(`SELECT * FROM backup_snapshots WHERE plan_id=? AND status='succeeded' ORDER BY id DESC LIMIT 1`).get(plan.id);
   const mode = previous ? 'incremental' : 'full';
   const tempDir = path.join(root(), 'tmp', String(task.id));
@@ -77,17 +77,24 @@ async function prepareSnapshot({ task, plan, provider, archives, uploadObject })
   const objects = [];
   const currentPaths = new Set(sources.map(source => source.relative));
   let bytesTotal = 0;
+  onProgress(`本地副本已完成，开始处理 ${sources.length} 个增量对象`);
+  let processed = 0;
   for (const source of sources) {
-    const hash = await sha256(source.absolute);
+    const previousFile = fileMap.get(source.relative);
     const stat = fs.statSync(source.absolute);
+    const canReuseHash = source.kind === 'platform' && previousFile
+      && previousFile.size === stat.size && previousFile.mtimeMs === stat.mtimeMs;
+    const hash = canReuseHash ? previousFile.hash : await sha256(source.absolute);
     const objectPath = path.join(objectDir, hash);
     const existed = fs.existsSync(objectPath);
     if (!existed) fs.copyFileSync(source.absolute, objectPath);
     const object = { hash, size: stat.size, local_path: objectPath, uploaded: existed, ...source };
-    const descriptor = { path: source.relative, hash, size: stat.size, kind: source.kind, volume: source.volume, source_path: source.source_path };
+    const descriptor = { path: source.relative, hash, size: stat.size, mtimeMs: stat.mtimeMs, kind: source.kind, volume: source.volume, source_path: source.source_path };
     fileMap.set(source.relative, descriptor);
     objects.push(object);
     if (!existed) bytesTotal += stat.size;
+    processed += 1;
+    if (processed % 25 === 0 || processed === sources.length) onProgress(`已处理 ${processed}/${sources.length} 个对象`);
   }
 
   for (const [key, value] of fileMap) {

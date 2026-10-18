@@ -460,7 +460,7 @@ const Backups = {
     return ({
       queued: this.t('phaseQueued', '等待执行'), preparing: this.t('phasePreparing', '准备'),
       pausing: this.t('phasePausing', '暂停项目'), archiving: this.t('phaseArchiving', '打包卷'),
-      uploading: this.t('phaseUploading', '上传'), resuming: this.t('phaseResuming', '恢复项目'),
+      uploading: this.t('phaseUploading', '上传'), snapshotting: this.t('phaseSnapshotting', '生成增量快照'), resuming: this.t('phaseResuming', '恢复项目'),
       'recovery-pending': this.t('phaseRecoveryPending', '等待恢复项目'), completed: this.t('phaseCompleted', '完成'),
       failed: this.t('phaseFailed', '失败'), interrupted: this.t('phaseInterrupted', '被重启中断')
     })[phase] || phase || '-';

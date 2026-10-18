@@ -81,7 +81,18 @@ function rescheduleScheduledPlans(from = new Date()) {
 }
 
 function appendTaskLog(taskId, message) {
-  const line = `[${new Date().toISOString()}] ${message}\n`;
+  const now = new Date();
+  let timestamp;
+  try {
+    timestamp = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: getPlatformTimezone(), hourCycle: 'h23',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }).format(now);
+  } catch {
+    timestamp = now.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
+  }
+  const line = `[${timestamp}] ${message}\n`;
   const row = db.prepare('SELECT log FROM backup_tasks WHERE id = ?').get(taskId);
   const next = `${row && row.log || ''}${line}`.slice(-200000);
   db.prepare('UPDATE backup_tasks SET log = ? WHERE id = ?').run(next, taskId);
@@ -551,6 +562,13 @@ async function runTask(taskId) {
         .run(JSON.stringify(archives), archives.reduce((sum, item) => sum + item.size, 0), taskId);
     }
 
+    setTaskPhase(taskId, 'resuming');
+    pausedIds = await resumeProjectContainers(taskId, pausedIds);
+    if (pausedIds.length) {
+      throw new Error(`Could not resume ${pausedIds.length} project container(s)`);
+    }
+    db.prepare('UPDATE projects SET status = ? WHERE id = ?').run(previousStatus, project.id);
+
     setTaskPhase(taskId, 'uploading');
     if (plan.backup_mode !== 'incremental') {
       for (const archive of archives) {
@@ -564,7 +582,8 @@ async function runTask(taskId) {
       setTaskPhase(taskId, 'snapshotting');
       snapshot = await incrementalBackup.prepareSnapshot({
         task, plan, provider, archives,
-        uploadObject: object => uploadSnapshotObject(taskId, provider, project, plan, object)
+        uploadObject: object => uploadSnapshotObject(taskId, provider, project, plan, object),
+        onProgress: message => appendTaskLog(taskId, message)
       });
       appendTaskLog(taskId, `Incremental snapshot #${snapshot.id} (${snapshot.mode}) stored ${snapshot.bytes_total} new bytes`);
       try {
@@ -574,13 +593,6 @@ async function runTask(taskId) {
         appendTaskLog(taskId, `Warning: failed to prune snapshots: ${err.message}`);
       }
     }
-
-    setTaskPhase(taskId, 'resuming');
-    pausedIds = await resumeProjectContainers(taskId, pausedIds);
-    if (pausedIds.length) {
-      throw new Error(`Could not resume ${pausedIds.length} project container(s)`);
-    }
-    db.prepare('UPDATE projects SET status = ? WHERE id = ?').run(previousStatus, project.id);
 
     const completedAt = new Date().toISOString();
     db.prepare(`

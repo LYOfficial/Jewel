@@ -2,12 +2,12 @@ const express = require('express');
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const { authMiddleware } = require('./auth');
+const { authMiddleware, requireAdmin } = require('./auth');
 const dockerService = require('./docker-service');
 
 const router = express.Router();
 
-router.use(authMiddleware);
+router.use(authMiddleware, requireAdmin);
 
 router.get('/', async (req, res) => {
   try {
@@ -101,7 +101,7 @@ router.delete('/:id', async (req, res) => {
 
 router.get('/:id/logs', async (req, res) => {
   try {
-    const tail = parseInt(req.query.tail) || 100;
+    const tail = req.query.tail === 'all' ? 'all' : Math.max(1, Math.min(parseInt(req.query.tail, 10) || 500, 5000));
     const logs = await dockerService.getContainerLogs(req.params.id, tail);
     res.json({ logs });
   } catch (err) {

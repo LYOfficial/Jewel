@@ -123,7 +123,24 @@ async function removeContainerAdvanced(id, options = {}) {
 async function getContainerLogs(id, tail = 100) {
   const container = await getContainer(id);
   const logs = await container.logs({ stdout: true, stderr: true, tail });
-  return logs.toString('utf-8');
+  return decodeDockerLogStream(logs);
+}
+
+// Docker returns an 8-byte stream header for each stdout/stderr frame.
+function decodeDockerLogStream(value) {
+  const buffer = Buffer.isBuffer(value) ? value : Buffer.from(value || '');
+  if (buffer.length < 8) return buffer.toString('utf-8');
+  let offset = 0;
+  let decoded = '';
+  let framed = false;
+  while (offset + 8 <= buffer.length) {
+    const size = buffer.readUInt32BE(offset + 4);
+    if (size < 0 || offset + 8 + size > buffer.length) break;
+    framed = true;
+    decoded += buffer.subarray(offset + 8, offset + 8 + size).toString('utf-8');
+    offset += 8 + size;
+  }
+  return framed && offset === buffer.length ? decoded : buffer.toString('utf-8');
 }
 
 // Capture logs from every container belonging to a compose project, regardless
@@ -816,6 +833,7 @@ module.exports = {
   removeContainer,
   removeContainerAdvanced,
   getContainerLogs,
+  decodeDockerLogStream,
   getContainerStats,
   deployProject,
   rebuildProject,

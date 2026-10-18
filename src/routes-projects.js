@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('./database');
-const { authMiddleware } = require('./auth');
+const { authMiddleware, requireAdmin, requireProjectAccess } = require('./auth');
 const gitService = require('./git-service');
 const dockerService = require('./docker-service');
 const composeProjectService = require('./compose-project-service');
@@ -33,6 +33,7 @@ function withDockerReadTimeout(promise, label = 'Docker read') {
 }
 
 router.use(authMiddleware);
+router.use('/:id', requireProjectAccess);
 
 function projectQuery(whereClause = '') {
   return `
@@ -107,7 +108,8 @@ async function runProjectOperation({ res, project, action, activeStatus, success
 }
 
 router.get('/', (req, res) => {
-  const projects = db.prepare(`${projectQuery()} ORDER BY p.created_at DESC`).all();
+  const filter = req.user.role === 'admin' ? '' : 'WHERE EXISTS (SELECT 1 FROM project_user_assignments pm WHERE pm.project_id = p.id AND pm.user_id = ?)';
+  const projects = db.prepare(`${projectQuery(filter)} ORDER BY p.created_at DESC`).all(...(req.user.role === 'admin' ? [] : [req.user.id]));
   res.json(projects);
 });
 
@@ -117,7 +119,7 @@ router.get('/:id', (req, res) => {
   res.json(project);
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   const { name, git_url, git_token, git_branch, compose_path, env_vars, container_name, reuse_volumes, auto_deploy, source_type, compose_content } = req.body;
   const isComposeProject = source_type === 'compose';
 
@@ -200,7 +202,7 @@ router.post('/', async (req, res) => {
   res.status(201).json(project);
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
@@ -260,7 +262,7 @@ router.put('/:id', async (req, res) => {
   res.json(updated);
 });
 
-router.put('/:id/env', (req, res) => {
+router.put('/:id/env', requireAdmin, (req, res) => {
   const { env_vars } = req.body;
   if (!env_vars) return res.status(400).json({ error: 'env_vars is required' });
 
@@ -278,7 +280,7 @@ router.put('/:id/env', (req, res) => {
   res.json(project);
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
@@ -558,7 +560,7 @@ router.get('/:id/logs', async (req, res) => {
     await Promise.all(containers.map(async c => {
       try {
         logs[c.Names[0]] = await withDockerReadTimeout(
-          dockerService.getContainerLogs(c.Id, 50),
+          dockerService.getContainerLogs(c.Id, 'all'),
           `Reading logs for ${c.Names[0] || c.Id.substring(0, 12)}`
         );
       } catch {

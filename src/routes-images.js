@@ -1,5 +1,5 @@
 const express = require('express');
-const { authMiddleware } = require('./auth');
+const { authMiddleware, requireAdmin } = require('./auth');
 const dockerService = require('./docker-service');
 
 // This router is mounted at /api/containers/images in index.js — BEFORE the
@@ -10,7 +10,7 @@ const dockerService = require('./docker-service');
 // "no such container: images" 404).
 
 const router = express.Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireAdmin);
 
 router.get('/', async (req, res) => {
   try {

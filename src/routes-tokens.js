@@ -1,10 +1,10 @@
 const express = require('express');
 const db = require('./database');
-const { authMiddleware } = require('./auth');
+const { authMiddleware, requireAdmin } = require('./auth');
 
 const router = express.Router();
 
-router.use(authMiddleware);
+router.use(authMiddleware, requireAdmin);
 
 router.get('/', (req, res) => {
   const tokens = db.prepare('SELECT id, name, provider, host, created_at, updated_at FROM git_tokens ORDER BY created_at DESC').all();

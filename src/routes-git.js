@@ -1,10 +1,10 @@
 const express = require('express');
-const { authMiddleware } = require('./auth');
+const { authMiddleware, requireAdmin } = require('./auth');
 const gitService = require('./git-service');
 
 const router = express.Router();
 
-router.use(authMiddleware);
+router.use(authMiddleware, requireAdmin);
 
 router.get('/repos', async (req, res) => {
   const { token, provider, host } = req.query;

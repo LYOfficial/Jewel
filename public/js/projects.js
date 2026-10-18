@@ -5,7 +5,7 @@ const Projects = {
         <section class="section-card">
           <div class="section-card-header">
             <div><h3 data-i18n="project.list">项目列表</h3><p data-i18n="project.listHint">选择项目查看部署配置、日志和运行资源。</p></div>
-            <button class="btn btn-primary" id="addProjectBtn" data-i18n="project.add">添加项目</button>
+            <button class="btn btn-primary" id="addProjectBtn" data-i18n="project.add" ${App.currentUser?.role === 'admin' ? '' : 'hidden'}>添加项目</button>
           </div>
           <div id="projectsList" class="table-container"></div>
         </section>
@@ -59,7 +59,7 @@ const Projects = {
                 { label: I18n.t('project.stop') || '停止', icon: '■', onclick: `Projects.stop(${p.id})` },
                 { label: I18n.t('project.detail') || '详情', icon: '⌕', onclick: `Projects.showDetail(${p.id})` },
                 { label: '复制最近失败诊断', icon: '⧉', visible: !!p.last_failure_id, onclick: `Projects.copyLatestError(${p.id})` },
-                { label: I18n.t('project.delete') || '删除', icon: '×', danger: true, onclick: `Projects.remove(${p.id})` }
+                { label: I18n.t('project.delete') || '删除', icon: '×', danger: true, visible: App.currentUser?.role === 'admin', onclick: `Projects.remove(${p.id})` }
               ])}
             </td>
           </tr>
@@ -470,6 +470,7 @@ const Projects = {
     try {
       const project = await API.getProject(id);
       const isComposeProject = project.source_type === 'compose';
+      const isAdmin = App.currentUser?.role === 'admin';
       const envVars = JSON.parse(project.env_vars || '{}');
       const envText = Object.entries(envVars).map(([k, v]) => `${k}=${v}`).join('\n');
 
@@ -494,7 +495,7 @@ const Projects = {
       const content = `
         <div class="project-detail-tabs" role="tablist" aria-label="${esc(I18n.t('project.detail') || '项目详情')}">
           <button class="project-detail-tab active" type="button" role="tab" aria-selected="true" data-project-detail-tab="dashboard">${esc(I18n.t('project.dashboard') || '仪表盘')}</button>
-          <button class="project-detail-tab" type="button" role="tab" aria-selected="false" data-project-detail-tab="deploy">${esc(I18n.t('project.deployment') || '部署')}</button>
+          <button class="project-detail-tab" type="button" role="tab" aria-selected="false" data-project-detail-tab="deploy" ${isAdmin ? '' : 'hidden'}>${esc(I18n.t('project.deployment') || '部署')}</button>
         </div>
         <section class="project-detail-panel" data-project-detail-panel="dashboard">
         <div class="project-detail-hero">
@@ -503,7 +504,7 @@ const Projects = {
             <strong>${esc(project.name)}</strong>
             <small>项目编号 ${project.id} · ${isComposeProject ? esc(I18n.t('project.localCompose') || '本地 Compose') : `${esc(project.git_branch)} · ${esc(commitShort)}`}</small>
           </div>
-          <button class="btn btn-sm" type="button" onclick="Modal.close();App.navigate('backups')">打开备份中心</button>
+          ${isAdmin ? '<button class="btn btn-sm" type="button" onclick="Modal.close();App.navigate(\'backups\')">打开备份中心</button>' : ''}
         </div>
         <div class="project-dashboard-toolbar">
           <div><strong>${esc(I18n.t('project.resourceOverview') || '资源概览')}</strong><small>${esc(I18n.t('project.dashboardHint') || '实时汇总项目关联的 Docker 资源')}</small></div>
@@ -597,7 +598,7 @@ const Projects = {
         <div class="form-group">
           <div class="log-toolbar"><label data-i18n="project.failedContainerLogs">失败时的容器日志</label><button class="btn btn-sm" type="button" id="copyFailedLogsBtn">复制</button></div>
           <div class="log-viewer-toolbar">
-            <button class="btn btn-sm" id="captureFailedLogsBtn" data-i18n="project.captureFailedLogs">重新捕获容器日志</button>
+            ${isAdmin ? '<button class="btn btn-sm" id="captureFailedLogsBtn" data-i18n="project.captureFailedLogs">重新捕获容器日志</button>' : ''}
             <span class="log-viewer-hint" id="captureFailedLogsHint" data-i18n="project.captureFailedLogsHint">仅捕获当前残留的容器日志（部署失败后的容器可能已被自动清理）</span>
           </div>
           <div class="log-viewer" id="projectFailedContainerLogs">${I18n.t('common.loading') || 'Loading...'}</div>
@@ -615,7 +616,7 @@ const Projects = {
 
       Modal.show(project.name, content, [
         { label: I18n.t('common.cancel') || '取消', class: 'btn-secondary' },
-        { label: I18n.t('common.save') || '保存', class: 'btn-primary', onClick: () => this.saveProject(project.id) }
+        ...(isAdmin ? [{ label: I18n.t('common.save') || '保存', class: 'btn-primary', onClick: () => this.saveProject(project.id) }] : [])
       ]);
       I18n.apply();
 

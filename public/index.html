@@ -26,29 +26,33 @@
           <span class="nav-icon"><img src="/img/icons/projects.svg" alt=""></span>
           <span data-i18n="nav.projects">项目</span>
         </a>
-        <a class="nav-item" data-page="containers" href="/containers">
+        <a class="nav-item admin-only" data-page="containers" href="/containers" hidden>
           <span class="nav-icon"><img src="/img/icons/containers.svg" alt=""></span>
           <span data-i18n="nav.containers">容器</span>
         </a>
-        <a class="nav-item" data-page="images" href="/images">
+        <a class="nav-item admin-only" data-page="images" href="/images" hidden>
           <span class="nav-icon"><img src="/img/icons/images.svg" alt=""></span>
           <span data-i18n="nav.images">镜像</span>
         </a>
-        <a class="nav-item" data-page="backups" href="/backups">
+        <a class="nav-item admin-only" data-page="backups" href="/backups" hidden>
           <span class="nav-icon"><img src="/img/icons/backups.svg" alt=""></span>
           <span data-i18n="nav.backups">备份中心</span>
         </a>
-        <a class="nav-item" data-page="tokens" href="/tokens">
+        <a class="nav-item admin-only" data-page="tokens" href="/tokens" hidden>
           <span class="nav-icon"><img src="/img/icons/tokens.svg" alt=""></span>
           <span data-i18n="nav.tokens">Git 令牌</span>
         </a>
-        <a class="nav-item" data-page="mcp" href="/mcp">
+        <a class="nav-item admin-only" data-page="mcp" href="/mcp" hidden>
           <span class="nav-icon">⌘</span>
           <span data-i18n="nav.mcp">MCP</span>
         </a>
-        <a class="nav-item" data-page="settings" href="/settings">
+        <a class="nav-item admin-only" data-page="settings" href="/settings" hidden>
           <span class="nav-icon"><img src="/img/icons/settings.svg" alt=""></span>
           <span data-i18n="nav.settings">设置</span>
+        </a>
+        <a class="nav-item admin-only" data-page="users" href="/users" hidden>
+          <span class="nav-icon">♙</span>
+          <span>账号管理</span>
         </a>
       </nav>
       <div class="sidebar-footer">
@@ -124,6 +128,7 @@
   <script src="/js/tokens.js"></script>
   <script src="/js/mcp.js"></script>
   <script src="/js/settings.js"></script>
+  <script src="/js/users.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

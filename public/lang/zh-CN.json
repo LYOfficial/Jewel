@@ -3,6 +3,7 @@
   "nav.projects": "项目",
   "nav.containers": "容器",
   "nav.settings": "设置",
+  "nav.users": "账号管理",
   "nav.tokens": "Git 令牌",
   "nav.images": "镜像",
   "nav.backups": "备份中心",

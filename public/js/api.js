@@ -109,6 +109,10 @@ const API = {
   getMe() { return this.get('/auth/me'); },
   changePassword(current_password, new_password) { return this.post('/auth/change-password', { current_password, new_password }); },
   changeUsername(new_username) { return this.post('/auth/change-username', { new_username }); },
+  getUsers() { return this.get('/users'); },
+  createUser(data) { return this.post('/users', data); },
+  updateUserProjects(id, project_ids) { return this.put(`/users/${id}/projects`, { project_ids }); },
+  deleteUser(id) { return this.del(`/users/${id}`); },
 
   // Projects
   getProjects() { return this.get('/projects'); },

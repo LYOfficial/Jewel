@@ -1,7 +1,7 @@
 const express = require('express');
 const os = require('os');
 const db = require('./database');
-const { authMiddleware } = require('./auth');
+const { authMiddleware, requireAdmin } = require('./auth');
 const updateService = require('./update-service');
 const dockerService = require('./docker-service');
 const projectMetricsAuth = require('./project-metrics-auth-service');
@@ -10,6 +10,11 @@ const backupService = require('./backup-service');
 const router = express.Router();
 
 router.use(authMiddleware);
+router.use((req, res, next) => {
+  const readOnlyPaths = new Set(['/info', '/monitor', '/jewel-resources', '/timezone', '/notes']);
+  if (req.user.role === 'admin' || (req.method === 'GET' && readOnlyPaths.has(req.path))) return next();
+  return requireAdmin(req, res, next);
+});
 
 router.get('/info', async (req, res) => {
   const info = {

@@ -6,6 +6,7 @@ const updateService = require('./update-service');
 const projectUpdateService = require('./project-update-service');
 
 const routesAuth = require('./routes-auth');
+const routesUsers = require('./routes-users');
 const routesProjects = require('./routes-projects');
 const routesContainers = require('./routes-containers');
 const routesImages = require('./routes-images');
@@ -33,6 +34,7 @@ app.use((req, res, next) => {
 });
 
 app.use('/api/auth', routesAuth);
+app.use('/api/users', routesUsers);
 app.use('/api/projects', routesProjects);
 // Mount images router BEFORE containers so that /api/containers/images
 // doesn't get caught by containers' /:id wildcard.

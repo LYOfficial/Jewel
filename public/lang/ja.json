@@ -3,6 +3,7 @@
   "nav.projects": "プロジェクト",
   "nav.containers": "コンテナ",
   "nav.settings": "設定",
+  "nav.users": "アカウント管理",
   "nav.tokens": "Git トークン",
   "nav.images": "イメージ",
   "nav.backups": "バックアップ",

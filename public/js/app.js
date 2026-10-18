@@ -1,5 +1,6 @@
 const App = {
   currentPage: 'dashboard',
+  currentUser: null,
   // Map URL sub-paths to internal page names
   pageMap: {
     '/': 'dashboard',
@@ -11,7 +12,8 @@ const App = {
     '/backups': 'backups',
     '/tokens': 'tokens',
     '/mcp': 'mcp',
-    '/settings': 'settings'
+    '/settings': 'settings',
+    '/users': 'users'
   },
   // Reverse map: internal page name -> canonical sub-path
   pagePaths: {
@@ -22,7 +24,8 @@ const App = {
     backups: '/backups',
     tokens: '/tokens',
     mcp: '/mcp',
-    settings: '/settings'
+    settings: '/settings',
+    users: '/users'
   },
 
   async init() {
@@ -35,8 +38,10 @@ const App = {
 
     try {
       const me = await API.getMe();
+      this.currentUser = me;
       document.getElementById('currentUser').textContent = me.username;
       this.updateUserAvatar(me.username);
+      document.querySelectorAll('.admin-only').forEach(el => { el.hidden = me.role !== 'admin'; });
     } catch {
       API.clearToken();
       window.location.href = '/login.html';
@@ -182,6 +187,7 @@ const App = {
       case 'tokens': Tokens.render(container); break;
       case 'mcp': Mcp.render(container); break;
       case 'settings': Settings.render(container); break;
+      case 'users': Users.render(container); break;
       default:
         // Unknown page — fall back to dashboard
         Dashboard.render(container);

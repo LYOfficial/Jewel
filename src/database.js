@@ -21,6 +21,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'admin',
     is_first_login INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -43,6 +44,15 @@ db.exec(`
     reuse_volumes INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS project_user_assignments (
+    user_id INTEGER NOT NULL,
+    project_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, project_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS settings (
@@ -179,6 +189,7 @@ addColumnIfMissing('projects', 'commit_hash', "TEXT DEFAULT ''");
 addColumnIfMissing('projects', 'remote_commit', "TEXT DEFAULT ''");
 addColumnIfMissing('projects', 'update_available', 'INTEGER DEFAULT 0');
 addColumnIfMissing('projects', 'last_update_check', 'TEXT DEFAULT NULL');
+addColumnIfMissing('users', 'role', "TEXT NOT NULL DEFAULT 'admin'");
 addColumnIfMissing('operation_logs', 'commit_hash', "TEXT DEFAULT ''");
 addColumnIfMissing('backup_tasks', 'operation_id', 'INTEGER DEFAULT NULL');
 addColumnIfMissing('backup_tasks', 'paused_container_ids', "TEXT DEFAULT '[]'");
@@ -194,6 +205,7 @@ if (userCount.count === 0) {
     hashedPassword
   );
 }
+db.prepare("UPDATE users SET role = 'admin' WHERE role IS NULL OR role = ''").run();
 
 const defaultSettings = {
   'language': 'zh-CN',

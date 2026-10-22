@@ -164,7 +164,16 @@ const API = {
   getContainerFile(id, p) { return this.get(`/containers/${id}/file?path=${encodeURIComponent(p)}`); },
   saveContainerFile(id, p, content) { return this.put(`/containers/${id}/file`, { path: p, content }); },
   deleteContainerFile(id, p) { return this.del(`/containers/${id}/file?path=${encodeURIComponent(p)}`); },
-  uploadToContainer(id, p, b64) { return this.post(`/containers/${id}/upload`, { path: p, content: b64 }); },
+  async uploadToContainer(id, p, file) {
+    const response = await fetch(`${this.baseUrl}/containers/${encodeURIComponent(id)}/upload?path=${encodeURIComponent(p)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/octet-stream' },
+      body: file
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+    return result;
+  },
   browseHost(p = '/') { return this.get(`/containers/host/browse?path=${encodeURIComponent(p)}`); },
 
   // Images

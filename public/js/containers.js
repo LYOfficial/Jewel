@@ -81,7 +81,7 @@ const Containers = {
               { label: I18n.t('container.terminal') || '终端', icon: '>_', onclick: `Containers.showTerminal('${c.Id}')` },
               { label: I18n.t('container.files') || '文件', icon: '□', onclick: `Containers.showFileManager('${c.Id}')` },
               { label: I18n.t('container.mounts') || '挂载', icon: '◇', onclick: `Containers.showMounts('${c.Id}')` },
-              { label: I18n.t('container.remove') || '删除', icon: '×', danger: true, onclick: `Containers.remove('${c.Id}')` }
+              { label: I18n.t('container.remove') || '删除', icon: '×', danger: true, visible: App.currentUser?.role === 'admin', onclick: `Containers.remove('${c.Id}')` }
             ])}</td>
           </tr>`;
         }).join('')}</tbody>
@@ -267,7 +267,7 @@ const Containers = {
 
       let html = `<div class="fm-breadcrumb">${esc(dirPath)}</div>`;
       html += `<div class="fm-actions">
-        <button class="btn btn-sm" onclick="Containers.navFile('${id}','${esc(parentPath)}')" data-i18n="container.upDir">上级</button>
+        <button class="btn btn-sm" onclick="Containers.navFile(${jsArg(id)},${jsArg(parentPath)})" data-i18n="container.upDir">上级</button>
         <button class="btn btn-sm" onclick="Containers.refreshFiles('${id}')" data-i18n="common.refresh">刷新</button>
         <button class="btn btn-sm" onclick="Containers.uploadFile('${id}')" data-i18n="container.upload">上传</button>
         <button class="btn btn-sm" onclick="Containers.newFile('${id}')" data-i18n="container.newFile">新建</button>
@@ -275,14 +275,14 @@ const Containers = {
       html += '<div class="fm-list">';
 
       if (dirPath !== '/') {
-        html += `<div class="fm-row fm-dir" onclick="Containers.navFile('${id}','${esc(parentPath)}')">📁 ..</div>`;
+        html += `<div class="fm-row fm-dir" onclick="Containers.navFile(${jsArg(id)},${jsArg(parentPath)})">📁 ..</div>`;
       }
 
       for (const f of (data.files || [])) {
         if (f.isDirectory) {
-          html += `<div class="fm-row fm-dir" onclick="Containers.navFile('${id}','${esc(f.path)}')">📁 ${esc(f.name)}</div>`;
+          html += `<div class="fm-row fm-dir" onclick="Containers.navFile(${jsArg(id)},${jsArg(f.path)})">📁 ${esc(f.name)}</div>`;
         } else {
-          html += `<div class="fm-row fm-file" onclick="Containers.openFile('${id}','${esc(f.path)}')">📄 ${esc(f.name)} <span class="fm-size">${formatFileSize(f.size)}</span></div>`;
+          html += `<div class="fm-row fm-file" onclick="Containers.openFile(${jsArg(id)},${jsArg(f.path)})">📄 ${esc(f.name)} <span class="fm-size">${formatFileSize(f.size)}</span></div>`;
         }
       }
 
@@ -305,22 +305,22 @@ const Containers = {
       const isBinary = /[\x00-\x08\x0E-\x1F]/.test(data.content.substring(0, 1024));
 
       if (isBinary) {
-        Modal.show(path.basename(filePath), `
+        Modal.show(filePath.split('/').pop(), `
           <p style="color:var(--text-muted);margin-bottom:12px" data-i18n="container.binaryFile">二进制文件，无法编辑</p>
           <div class="fm-actions">
-            <button class="btn btn-sm" onclick="Containers.downloadFile('${id}','${esc(filePath)}')" data-i18n="container.download">下载</button>
+            <button class="btn btn-sm" onclick="Containers.downloadFile(${jsArg(id)},${jsArg(filePath)})" data-i18n="container.download">下载</button>
           </div>
         `, [{ label: I18n.t('common.close') || 'Close', class: 'btn-secondary' }]);
         I18n.apply();
         return;
       }
 
-      Modal.show(path.basename(filePath), `
+      Modal.show(filePath.split('/').pop(), `
         <textarea class="note-editor" id="fileContent" rows="16">${esc(data.content)}</textarea>
         <div class="fm-actions" style="margin-top:8px">
           <button class="btn btn-sm btn-primary" id="saveFileBtn" data-i18n="common.save">保存</button>
-          <button class="btn btn-sm" onclick="Containers.downloadFile('${id}','${esc(filePath)}')" data-i18n="container.download">下载</button>
-          <button class="btn btn-sm btn-danger" onclick="Containers.deleteFile('${id}','${esc(filePath)}')" data-i18n="container.deleteFile">删除</button>
+          <button class="btn btn-sm" onclick="Containers.downloadFile(${jsArg(id)},${jsArg(filePath)})" data-i18n="container.download">下载</button>
+          <button class="btn btn-sm btn-danger" onclick="Containers.deleteFile(${jsArg(id)},${jsArg(filePath)})" data-i18n="container.deleteFile">删除</button>
         </div>
       `, [{ label: I18n.t('common.close') || 'Close', class: 'btn-secondary' }]);
       I18n.apply();
@@ -337,7 +337,18 @@ const Containers = {
 
   async downloadFile(id, filePath) {
     try {
-      window.open(`/api/containers/${id}/download?path=${encodeURIComponent(filePath)}`, '_blank');
+      const response = await fetch(`/api/containers/${encodeURIComponent(id)}/download?path=${encodeURIComponent(filePath)}`, {
+        headers: { Authorization: `Bearer ${API.token}` }
+      });
+      if (!response.ok) throw new Error((await response.json()).error || `HTTP ${response.status}`);
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filePath.split('/').pop() || 'download';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) { Notify.error(err.message); }
   },
 
@@ -357,15 +368,10 @@ const Containers = {
       const file = e.target.files[0];
       if (!file) return;
       try {
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-          const b64 = btoa(new Uint8Array(ev.target.result).reduce((s, b) => s + String.fromCharCode(b), ''));
-          const destPath = this.filePath === '/' ? `/${file.name}` : `${this.filePath}/${file.name}`;
-          await API.uploadToContainer(id, destPath, b64);
-          Notify.success(I18n.t('container.uploaded') || 'File uploaded');
-          this.refreshFiles(id);
-        };
-        reader.readAsArrayBuffer(file);
+        const destPath = this.filePath === '/' ? `/${file.name}` : `${this.filePath}/${file.name}`;
+        await API.uploadToContainer(id, destPath, file);
+        Notify.success(I18n.t('container.uploaded') || 'File uploaded');
+        this.refreshFiles(id);
       } catch (err) { Notify.error(err.message); }
     };
     input.click();
@@ -395,7 +401,7 @@ const Containers = {
         html = `<table>
           <thead><tr>
             <th data-i18n="container.mountType">类型</th>
-            <th data-i18n="container.hostPath">主机路径</th>
+            ${App.currentUser?.role === 'admin' ? '<th data-i18n="container.hostPath">主机路径</th>' : ''}
             <th data-i18n="container.containerPath">容器路径</th>
             <th data-i18n="container.access">权限</th>
             <th></th>
@@ -403,10 +409,10 @@ const Containers = {
           <tbody>${mounts.map(m => `
             <tr>
               <td><span class="badge badge-${m.type === 'volume' ? 'ready' : 'running'}">${esc(m.type)}</span></td>
-              <td class="fm-path">${esc(m.source)}</td>
+              ${App.currentUser?.role === 'admin' ? `<td class="fm-path">${esc(m.source)}</td>` : ''}
               <td class="fm-path">${esc(m.destination)}</td>
               <td>${m.rw ? 'RW' : 'RO'}</td>
-              <td><button class="btn btn-sm" onclick="Containers.browseHost('${esc(m.source)}')" data-i18n="container.browse">浏览</button></td>
+              <td>${App.currentUser?.role === 'admin' ? `<button class="btn btn-sm" onclick="Containers.browseHost(${jsArg(m.source)})" data-i18n="container.browse">浏览</button>` : ''}</td>
             </tr>
           `).join('')}</tbody>
         </table>`;
@@ -426,11 +432,11 @@ const Containers = {
       html += '<div class="fm-list">';
       if (dirPath !== '/') {
         const parent = dirPath.split('/').slice(0, -1).join('/') || '/';
-        html += `<div class="fm-row fm-dir" onclick="Containers.browseHost('${esc(parent)}')">📁 ..</div>`;
+        html += `<div class="fm-row fm-dir" onclick="Containers.browseHost(${jsArg(parent)})">📁 ..</div>`;
       }
       for (const f of (data.files || [])) {
         if (f.isDirectory) {
-          html += `<div class="fm-row fm-dir" onclick="Containers.browseHost('${esc(data.path === '/' ? '/' + f.name : data.path + '/' + f.name)}')">📁 ${esc(f.name)}</div>`;
+          html += `<div class="fm-row fm-dir" onclick="Containers.browseHost(${jsArg(data.path === '/' ? '/' + f.name : data.path + '/' + f.name)})">📁 ${esc(f.name)}</div>`;
         } else {
           html += `<div class="fm-row fm-file">📄 ${esc(f.name)}</div>`;
         }
@@ -443,6 +449,10 @@ const Containers = {
     } catch (err) { Notify.error(err.message); }
   }
 };
+
+function jsArg(value) {
+  return App.escapeHtml(JSON.stringify(String(value == null ? '' : value)));
+}
 
 function formatFileSize(bytes) {
   if (!bytes) return '';

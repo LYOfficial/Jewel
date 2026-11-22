@@ -105,6 +105,7 @@ async function checkProjectUpdate(args) {
     throw new Error('Direct Docker Compose projects do not have Git updates');
   }
   const updated = await projectUpdateService.checkProjectUpdate(project.id, { waitForLock: true });
+  if (updated?.update_check_error) throw new Error(redactSecrets(updated.update_check_error));
   return publicProject(updated || project);
 }
 

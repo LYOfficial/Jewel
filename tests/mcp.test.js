@@ -12,6 +12,7 @@ test('MCP authenticates an access-key/token pair and serves Streamable HTTP tool
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jewel-mcp-'));
   process.env.DATA_DIR = dataDir;
   const db = require('../src/database');
+  const projectUpdateService = require('../src/project-update-service');
   const mcpAuth = require('../src/mcp-auth-service');
   const express = require('express');
   const routesMcp = require('../src/routes-mcp');
@@ -84,6 +85,25 @@ test('MCP authenticates an access-key/token pair and serves Streamable HTTP tool
     const projectsResult = await projects.json();
     assert.equal(projectsResult.result.content[0].type, 'text');
     assert.deepEqual(JSON.parse(projectsResult.result.content[0].text), []);
+
+    const project = db.prepare('INSERT INTO projects (name, git_url) VALUES (?, ?)')
+      .run('example', 'https://example.org/repo.git');
+    const originalCheck = projectUpdateService.checkProjectUpdate;
+    try {
+      projectUpdateService.checkProjectUpdate = async () => ({
+        update_check_error: 'git fetch failed: Resource temporarily unavailable\ntoken=example-secret'
+      });
+      const failedCheck = await request({
+        jsonrpc: '2.0', id: 41, method: 'tools/call', params: {
+          name: 'jewel_check_project_update', arguments: { project_id: project.lastInsertRowid }
+        }
+      }, credentials);
+      const { result } = await failedCheck.json();
+      assert.equal(result.isError, true);
+      assert.equal(result.content[0].text, 'git fetch failed: Resource temporarily unavailable\ntoken=[REDACTED]');
+    } finally {
+      projectUpdateService.checkProjectUpdate = originalCheck;
+    }
 
     const revoked = mcpAuth.revokeToken(created.token.id);
     assert.ok(revoked.revoked_at);

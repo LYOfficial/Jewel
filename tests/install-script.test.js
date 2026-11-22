@@ -56,6 +56,7 @@ test('docker run keeps every required option and the image as its final argument
   assert.ok(runBlock, 'docker run block should be present');
   for (const option of [
     '--name "$CONTAINER"',
+    '--init',
     '--restart unless-stopped',
     '-p "${PORT}:330"',
     '-v /var/run/docker.sock:/var/run/docker.sock',

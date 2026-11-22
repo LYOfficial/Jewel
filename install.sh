@@ -215,6 +215,7 @@ docker tag "$CANDIDATE_IMAGE" "$IMAGE"
 echo "==> Starting the new Jewel container..."
 if ! docker run -d \
   --name "$CONTAINER" \
+  --init \
   --restart unless-stopped \
   --label io.jewel.managed=true \
   -p "${PORT}:330" \
